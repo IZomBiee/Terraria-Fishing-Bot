@@ -10,8 +10,8 @@ pub struct BotSettings {
     pub monitor_id: u8,
     pub fps: u8,
     pub casting_delay: u64,
-    pub reeling_delay: u64,
     pub hsv_min: [u8; 3],
     pub hsv_max: [u8; 3],
-    pub catch_thresh: u32,
+    pub catch_threshold: u32,
+    pub liquid_threshold: u32,
 }

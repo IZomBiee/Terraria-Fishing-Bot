@@ -1,50 +1,73 @@
+use device_query::{DeviceQuery, DeviceState, Keycode};
 use show_image::{ImageView, create_window};
 use terraria_fishing_bot::BotSettings;
 use terraria_fishing_bot::bot::Bot;
 use terraria_fishing_bot::controller::Controller;
 use terraria_fishing_bot::cursor_capturer::CursorCapturer;
-use terraria_fishing_bot::opencv::{hsva_in_range, rgba_2_hsva};
+use terraria_fishing_bot::opencv;
 
 #[show_image::main]
 fn main() {
     let window = create_window("Terraria Preview", Default::default()).unwrap();
-    let window_mask = create_window("Terraria Preview - Mask", Default::default()).unwrap();
+
     let settings = BotSettings {
-        margin: 70,
+        margin: 100,
         monitor_id: 1,
-        fps: 20,
-        casting_delay: 1500,
-        reeling_delay: 1500,
+        fps: 5,
+        casting_delay: 1000,
         hsv_min: [0, 88, 140],
         hsv_max: [17, 255, 255],
-        catch_thresh: 15,
+        catch_threshold: 150,
+        liquid_threshold: 30,
     };
     let mut capturer = CursorCapturer::new(settings);
     let controller = Controller::new(settings);
 
     let mut bot = Bot::new(settings, controller);
 
-    bot.start();
+    let mut last_rgba_frame: Option<(Vec<u8>, (u32, u32))> = None;
+
+    let device_state = DeviceState::new();
+
+    println!("Press Q to start, R to stop.");
 
     loop {
-        let Some((mut rgba_frame, (width, height))) = capturer.get_frame() else {
+        let keys = device_state.get_keys();
+        if keys.contains(&Keycode::Q) {
+            bot.start();
+        } else if keys.contains(&Keycode::R) {
+            bot.stop();
+        }
+
+        let Some((current_rgba_frame, (current_width, current_height))) = capturer.get_frame()
+        else {
             continue;
         };
 
-        let hsv_frame = rgba_2_hsva(&rgba_frame);
-        let mask = hsva_in_range(&hsv_frame, settings.hsv_min, settings.hsv_max);
+        if let Some((last_rgba_frame, (last_width, last_height))) = &last_rgba_frame {
+            if current_width == *last_width && current_height == *last_height {
+                let mask = opencv::rgba_difference_mask(&current_rgba_frame, last_rgba_frame);
 
-        bot.update(&mask, width, height);
-        bot.draw_last_pos(&mut rgba_frame, width, height);
+                let mut draw_rgba_frame = current_rgba_frame.clone();
 
-        let view = ImageView::new(show_image::ImageInfo::rgba8(width, height), &rgba_frame);
+                bot.update(&mask);
 
-        window.set_image("Terraria Preview", view).unwrap();
+                bot.draw_liquid_level(&mut draw_rgba_frame, current_width, current_height);
 
-        let view_mask = ImageView::new(show_image::ImageInfo::mono8(width, height), &mask);
+                let view = ImageView::new(
+                    show_image::ImageInfo::rgba8(current_width, current_height),
+                    &draw_rgba_frame,
+                );
 
-        window_mask
-            .set_image("Terraria Preview - Mask", view_mask)
-            .unwrap();
+                // let view = ImageView::new(
+                //     show_image::ImageInfo::mono8(current_width, current_height),
+                //     &mask,
+                // );
+
+                window.set_image("Terraria Preview", view).unwrap();
+            }
+        };
+
+        last_rgba_frame = Some((current_rgba_frame, (current_width, current_height)));
     }
 }

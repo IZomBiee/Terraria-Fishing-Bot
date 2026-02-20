@@ -31,6 +31,34 @@ pub fn rgba_2_hsva(raw_data: &[u8]) -> Vec<u8> {
     output
 }
 
+pub fn rgba_difference_mask(img1: &[u8], img2: &[u8]) -> Vec<u8> {
+    assert_eq!(
+        img1.len(),
+        img2.len(),
+        "Images must have the same dimensions"
+    );
+
+    let mut mask = Vec::with_capacity(img1.len() / 4);
+
+    for (px1, px2) in img1.chunks_exact(4).zip(img2.chunks_exact(4)) {
+        let r1 = px1[0];
+        let g1 = px1[1];
+        let b1 = px1[2];
+
+        let r2 = px2[0];
+        let g2 = px2[1];
+        let b2 = px2[2];
+
+        if r1 != r2 || g1 != g2 || b1 != b2 {
+            mask.push(255);
+        } else {
+            mask.push(0);
+        }
+    }
+
+    mask
+}
+
 pub fn circle(
     rgba_data: &mut [u8],
     width: u32,
