@@ -14,4 +14,6 @@ pub struct BotSettings {
     pub hsv_max: [u8; 3],
     pub catch_threshold: u32,
     pub liquid_threshold: u32,
+    pub liquid_offset: i32,
+    pub liquid_gap: u32,
 }

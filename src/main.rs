@@ -17,8 +17,10 @@ fn main() {
         casting_delay: 1000,
         hsv_min: [0, 88, 140],
         hsv_max: [17, 255, 255],
-        catch_threshold: 150,
-        liquid_threshold: 30,
+        catch_threshold: 200,
+        liquid_threshold: 100,
+        liquid_offset: -5,
+        liquid_gap: 20,
     };
     let mut capturer = CursorCapturer::new(settings);
     let controller = Controller::new(settings);
@@ -50,9 +52,9 @@ fn main() {
 
                 let mut draw_rgba_frame = current_rgba_frame.clone();
 
-                bot.update(&mask);
+                bot.update(&mask, current_width, current_height);
 
-                bot.draw_liquid_level(&mut draw_rgba_frame, current_width, current_height);
+                bot.draw_detection_gap(&mut draw_rgba_frame, current_width, current_height);
 
                 let view = ImageView::new(
                     show_image::ImageInfo::rgba8(current_width, current_height),
