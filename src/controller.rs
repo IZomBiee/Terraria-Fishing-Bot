@@ -1,15 +1,15 @@
-use crate::BotSettings;
+use crate::settings::Settings;
 use mouse_rs::{Mouse, types::keys::Keys};
 use std::thread;
 use std::time::Duration;
 
-pub struct Controller {
+pub struct Controller<'a> {
     pub mouse: Mouse,
-    pub settings: BotSettings,
+    pub settings: &'a Settings,
 }
 
-impl Controller {
-    pub fn new(settings: BotSettings) -> Controller {
+impl<'a> Controller<'a> {
+    pub fn new(settings: &'_ Settings) -> Controller<'_> {
         Controller {
             mouse: Mouse::new(),
             settings,

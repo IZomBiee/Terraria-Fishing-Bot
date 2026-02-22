@@ -3562,13 +3562,15 @@ dependencies = [
 
 [[package]]
 name = "terraria_fishing_bot"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "device_query",
  "image",
  "mouse-rs",
  "mouse_position",
  "ndarray",
+ "serde",
+ "serde_json",
  "show-image",
  "strum_macros",
  "video-rs",

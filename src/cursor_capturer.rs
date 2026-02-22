@@ -1,12 +1,12 @@
-use crate::BotSettings;
+use crate::settings::Settings;
+use image::RgbaImage;
 use mouse_position::mouse_position::Mouse;
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 use xcap::Monitor;
-use image::RgbaImage;
 
-pub struct CursorCapturer {
-    settings: BotSettings,
+pub struct CursorCapturer<'a> {
+    settings: &'a Settings,
     width: u32,
     height: u32,
     monitor: Monitor,
@@ -14,11 +14,14 @@ pub struct CursorCapturer {
     frame_history: VecDeque<Instant>,
 }
 
-impl CursorCapturer {
-    pub fn new(settings: BotSettings) -> CursorCapturer {
+impl<'a> CursorCapturer<'a> {
+    pub fn new(settings: &Settings) -> CursorCapturer<'_> {
         let monitors = Monitor::all().unwrap();
 
-        let monitor = monitors.first().expect("The monitor was not found!").clone();
+        let monitor = monitors
+            .first()
+            .expect("The monitor was not found!")
+            .clone();
 
         CursorCapturer {
             settings,
@@ -49,9 +52,7 @@ impl CursorCapturer {
     }
 
     pub fn get_frame(&mut self) -> Option<RgbaImage> {
-        let Some(region) = self.get_region() else {
-            return None;
-        };
+        let region = self.get_region()?;
 
         let (x0, y0, x1, y1) = region;
 

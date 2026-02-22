@@ -51,11 +51,14 @@ pub fn rgba_difference_mask(img1: &RgbaImage, img2: &RgbaImage) -> GrayImage {
     for (x, y, p1) in img1.enumerate_pixels() {
         let p2 = img2.get_pixel(x, y);
 
-        if p1[0] != p2[0] || p1[1] != p2[1] || p1[2] != p2[2] {
-            mask.put_pixel(x, y, Luma([255]));
-        } else {
-            mask.put_pixel(x, y, Luma([0]));
-        }
+        let r_diff = (p1[0] as f32 - p2[0] as f32).powi(2);
+        let g_diff = (p1[1] as f32 - p2[1] as f32).powi(2);
+        let b_diff = (p1[2] as f32 - p2[2] as f32).powi(2);
+
+        let distance = (r_diff + g_diff + b_diff).sqrt();
+        let result = distance.min(255.0) as u8;
+
+        mask.put_pixel(x, y,Luma([result]));
     }
 
     mask
@@ -74,11 +77,14 @@ pub fn rgb_difference_mask(img1: &RgbImage, img2: &RgbImage) -> GrayImage {
     for (x, y, p1) in img1.enumerate_pixels() {
         let p2 = img2.get_pixel(x, y);
 
-        if p1[0] != p2[0] || p1[1] != p2[1] || p1[2] != p2[2] {
-            mask.put_pixel(x, y, Luma([255]));
-        } else {
-            mask.put_pixel(x, y, Luma([0]));
-        }
+        let r_diff = (p1[0] as f32 - p2[0] as f32).powi(2);
+        let g_diff = (p1[1] as f32 - p2[1] as f32).powi(2);
+        let b_diff = (p1[2] as f32 - p2[2] as f32).powi(2);
+
+        let distance = (r_diff + g_diff + b_diff).sqrt();
+        let result = distance.min(255.0) as u8;
+
+        mask.put_pixel(x, y,Luma([result]));
     }
 
     mask

@@ -1,4 +1,4 @@
-use crate::{BotSettings, controller::Controller};
+use crate::{controller::Controller, settings::Settings};
 use image::{GrayImage, RgbaImage};
 use std::time::{Duration, Instant};
 use strum_macros::AsRefStr;
@@ -11,18 +11,16 @@ pub enum BotState {
     Reeling,
     CastingCooldown(Instant),
     CheckingLiquidLevel,
-    CheckingNoise(Instant),
 }
-
-pub struct Bot {
+pub struct Bot<'a> {
     pub state: BotState,
-    pub settings: BotSettings,
-    pub controller: Option<Controller>,
+    pub settings: &'a Settings,
+    pub controller: Option<Controller<'a>>,
     liquid_level: Option<u32>,
 }
 
-impl Bot {
-    pub fn new(settings: BotSettings, controller: Option<Controller>) -> Bot {
+impl<'a> Bot<'a> {
+    pub fn new(settings: &'a Settings, controller: Option<Controller<'a>>) -> Bot<'a> {
         Bot {
             state: BotState::Idle,
             settings,
@@ -36,38 +34,20 @@ impl Bot {
         self.state = new_state;
     }
 
-    fn get_liquid_threshold(&self, width: u32) -> u32 {
-        (self.settings.liquid_threshold * width as f32) as u32
-    }
-
-    fn get_liquid_offset(&self, height: u32) -> i32 {
-        (self.settings.liquid_offset * height as f32) as i32
-    }
-
-    fn get_catch_threshold(&self, _height: u32, width: u32) -> u32 {
-        let threshold = (self.settings.catch_threshold * width as f32) as u32;
-        threshold
-    }
-
-    fn get_detection_gap_size(&self, height: u32) -> u32 {
-        let gap = (self.settings.detection_gap_size * height as f32) as u32;
-        gap
-    }
-
-    fn get_liquid_level(mask: &GrayImage, threshold: u32) -> Option<u32>{
+    fn get_liquid_level(mask: &GrayImage, threshold: u32) -> Option<u32> {
         for (i, row) in mask.enumerate_rows() {
-            let stack = row.filter(|(_, _, pixel)| pixel.0[0] > 0).count();
-            if stack as u32 > threshold {
+            let stack: u32 = row.map(|(_x, _y, pixel)| pixel.0[0] as u32).sum();
+            if stack > threshold {
                 return Some(i);
             }
         }
         None
     }
 
-    fn get_detection_gap(&self, height: u32) -> Option<(u32, u32)> {
-        if let Some(liquid_level) = self.liquid_level  {
-            let liquid_level = liquid_level as i32 + self.get_liquid_offset(height);
-            let gap = liquid_level as i32 - self.get_detection_gap_size(height) as i32;
+    fn get_detection_gap(&self) -> Option<(u32, u32)> {
+        if let Some(liquid_level) = self.liquid_level {
+            let liquid_level = liquid_level as i32 + self.settings.liquid_offset;
+            let gap = liquid_level - self.settings.detection_gap_size as i32;
             if liquid_level > 0 && gap > 0 {
                 return Some((gap as u32, liquid_level as u32));
             }
@@ -75,13 +55,27 @@ impl Bot {
         None
     }
 
+    fn get_abs_difference(&self, mask: &GrayImage) -> Option<u32> {
+        if let Some((y_start, y_stop)) = self.get_detection_gap() {
+            let start_idx = (y_start * mask.width()) as usize;
+            let stop_idx = (y_stop * mask.width()) as usize;
+            let abs_difference: u32 = mask.as_raw()[start_idx..stop_idx]
+                .iter()
+                .filter(|pixel| *(*pixel) > 0)
+                .count() as u32;
+            return Some(abs_difference);
+        }
+        None
+    }
+
     pub fn update(&mut self, mask: &GrayImage) {
         match self.state {
             BotState::CheckingLiquidLevel => {
-                let level = Bot::get_liquid_level(mask, self.get_liquid_threshold(mask.width()));
+                let level = Bot::get_liquid_level(mask, self.settings.liquid_threshold);
                 self.liquid_level = level;
 
-                if self.get_detection_gap(mask.height()).is_some() {
+                if self.get_detection_gap().is_some() {
+                    println!("The liquid level is {}.", level.unwrap());
                     self.set_state(BotState::Casting);
                 } else {
                     println!("Can't find liquid level.");
@@ -100,21 +94,19 @@ impl Bot {
                 };
             }
             BotState::WaitingForBite => {
-                if let Some((y_start, y_stop)) = self.get_detection_gap(mask.height()) {
-                    let start_idx = (y_start * mask.width()) as usize;
-                    let stop_idx = (y_stop * mask.width()) as usize;
-                    let abs_difference: u32 =
-                        dbg!(mask.as_raw()[start_idx..stop_idx].iter().filter(|pixel| *(*pixel)>0).count() as u32);
-                    if abs_difference > self.get_catch_threshold(mask.height(), mask.width()) {
-                        self.set_state(BotState::Reeling);
-                    }
-                } else {
+                let abs_difference = self.get_abs_difference(mask);
+                let Some(abs_difference) = abs_difference else {
                     if let Some(controller) = &self.controller {
                         controller.catch();
                     }
                     self.set_state(BotState::CheckingLiquidLevel);
+                    return;
+                };
+                if abs_difference > self.settings.catch_threshold {
+                    self.set_state(BotState::Reeling);
                 }
             }
+
             BotState::Reeling => {
                 if let Some(controller) = &self.controller {
                     controller.catch();
@@ -128,8 +120,8 @@ impl Bot {
 
     pub fn draw_detection_gap(&self, frame: &mut RgbaImage) {
         let (width, height) = frame.dimensions();
-        
-        if let Some((y_start, y_stop)) = self.get_detection_gap(height) {
+
+        if let Some((y_start, y_stop)) = self.get_detection_gap() {
             for (y, color) in [(y_start, [255, 255, 255, 255]), (y_stop, [0, 0, 0, 255])] {
                 if y < height {
                     for x in 0..width {
