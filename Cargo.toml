@@ -1,12 +1,15 @@
 [package]
 name = "terraria_fishing_bot"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2024"
 
 [dependencies]
 device_query = "4.0.1"
+image = "0.25.9"
 mouse-rs = "0.4.2"
 mouse_position = "0.1.4"
+ndarray = "0.16.1"
 show-image = "0.14.1"
 strum_macros = "0.27.2"
+video-rs = { version = "0.10", features = ["ndarray"] }
 xcap = "0.8.2"

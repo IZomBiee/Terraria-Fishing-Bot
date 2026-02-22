@@ -10,13 +10,13 @@ pub struct Controller {
 
 impl Controller {
     pub fn new(settings: BotSettings) -> Controller {
-        return Controller {
+        Controller {
             mouse: Mouse::new(),
             settings,
-        };
+        }
     }
 
-    pub fn catch(&mut self) {
+    pub fn catch(&self) {
         self.mouse
             .press(&Keys::LEFT)
             .expect("Unable to press button");
@@ -26,7 +26,7 @@ impl Controller {
             .expect("Unable to release button");
     }
 
-    pub fn cast(&mut self) {
+    pub fn cast(&self) {
         self.mouse
             .press(&Keys::LEFT)
             .expect("Unable to press button");

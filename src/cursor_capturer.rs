@@ -3,6 +3,7 @@ use mouse_position::mouse_position::Mouse;
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 use xcap::Monitor;
+use image::RgbaImage;
 
 pub struct CursorCapturer {
     settings: BotSettings,
@@ -17,7 +18,7 @@ impl CursorCapturer {
     pub fn new(settings: BotSettings) -> CursorCapturer {
         let monitors = Monitor::all().unwrap();
 
-        let monitor = monitors.get(0).expect("The monitor was not found!").clone();
+        let monitor = monitors.first().expect("The monitor was not found!").clone();
 
         CursorCapturer {
             settings,
@@ -37,7 +38,7 @@ impl CursorCapturer {
             let count = self.frame_history.len() as f32;
             return count / duration.as_secs_f32();
         }
-        return 0f32;
+        0f32
     }
 
     fn add_frame_history(&mut self) {
@@ -47,7 +48,7 @@ impl CursorCapturer {
         self.frame_history.push_back(Instant::now());
     }
 
-    pub fn get_frame(&mut self) -> Option<(Vec<u8>, (u32, u32))> {
+    pub fn get_frame(&mut self) -> Option<RgbaImage> {
         let Some(region) = self.get_region() else {
             return None;
         };
@@ -69,7 +70,7 @@ impl CursorCapturer {
 
         self.add_frame_history();
 
-        return Some((frame.as_raw().to_vec(), (x1 - x0, y1 - y0)));
+        Some(frame)
     }
 
     pub fn get_region(&self) -> Option<(u32, u32, u32, u32)> {
@@ -98,6 +99,6 @@ impl CursorCapturer {
             return None;
         };
 
-        return Some((x0 as u32, y0 as u32, x1 as u32, y1 as u32));
+        Some((x0 as u32, y0 as u32, x1 as u32, y1 as u32))
     }
 }
