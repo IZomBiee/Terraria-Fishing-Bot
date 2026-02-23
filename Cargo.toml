@@ -5,6 +5,8 @@ edition = "2024"
 
 [dependencies]
 device_query = "4.0.1"
+eframe = "0.23"
+enigo = "0.6.1"
 image = "0.25.9"
 mouse-rs = "0.4.2"
 mouse_position = "0.1.4"
@@ -13,5 +15,4 @@ serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 show-image = "0.14.1"
 strum_macros = "0.27.2"
-video-rs = { version = "0.10", features = ["ndarray"] }
 xcap = "0.8.2"

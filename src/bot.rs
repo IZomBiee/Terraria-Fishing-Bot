@@ -1,4 +1,4 @@
-use crate::{controller::Controller, settings::Settings};
+use crate::{controller::Controller, opencv, settings::Settings};
 use image::{GrayImage, RgbaImage};
 use std::time::{Duration, Instant};
 use strum_macros::AsRefStr;
@@ -11,12 +11,15 @@ pub enum BotState {
     Reeling,
     CastingCooldown(Instant),
     CheckingLiquidLevel,
+    UsingPotions,
 }
 pub struct Bot<'a> {
     pub state: BotState,
     pub settings: &'a Settings,
     pub controller: Option<Controller<'a>>,
     liquid_level: Option<u32>,
+    last_frame: Option<RgbaImage>,
+    last_potion_use_time: Instant,
 }
 
 impl<'a> Bot<'a> {
@@ -26,6 +29,8 @@ impl<'a> Bot<'a> {
             settings,
             controller,
             liquid_level: None,
+            last_frame: None,
+            last_potion_use_time: Instant::now() - Duration::from_hours(1),
         }
     }
 
@@ -68,15 +73,37 @@ impl<'a> Bot<'a> {
         None
     }
 
-    pub fn update(&mut self, mask: &GrayImage) {
+    pub fn get_difference_mask(&self, current_frame: &RgbaImage) -> Option<GrayImage> {
+        let last_image = self.last_frame.as_ref()?;
+        if current_frame.dimensions() != last_image.dimensions() {
+            return None;
+        }
+        Some(opencv::rgba_difference_mask(current_frame, last_image))
+    }
+
+    pub fn update(&mut self, frame: &RgbaImage) {
+        let Some(difference_mask) = &self.get_difference_mask(frame) else {
+            self.last_frame = Some(frame.clone());
+            return;
+        };
+
         match self.state {
+            BotState::UsingPotions => {
+                if let Some(controller) = &self.controller
+                    && Instant::now() - self.last_potion_use_time > Duration::from_mins(4)
+                {
+                    controller.use_potions();
+                    self.last_potion_use_time = Instant::now();
+                }
+                self.set_state(BotState::Casting);
+            }
             BotState::CheckingLiquidLevel => {
-                let level = Bot::get_liquid_level(mask, self.settings.liquid_threshold);
+                let level = Bot::get_liquid_level(difference_mask, self.settings.liquid_threshold);
                 self.liquid_level = level;
 
                 if self.get_detection_gap().is_some() {
                     println!("The liquid level is {}.", level.unwrap());
-                    self.set_state(BotState::Casting);
+                    self.set_state(BotState::UsingPotions);
                 } else {
                     println!("Can't find liquid level.");
                 };
@@ -94,7 +121,7 @@ impl<'a> Bot<'a> {
                 };
             }
             BotState::WaitingForBite => {
-                let abs_difference = self.get_abs_difference(mask);
+                let abs_difference = self.get_abs_difference(difference_mask);
                 let Some(abs_difference) = abs_difference else {
                     if let Some(controller) = &self.controller {
                         controller.catch();
@@ -106,16 +133,16 @@ impl<'a> Bot<'a> {
                     self.set_state(BotState::Reeling);
                 }
             }
-
             BotState::Reeling => {
                 if let Some(controller) = &self.controller {
                     controller.catch();
                 }
 
-                self.set_state(BotState::Casting);
+                self.set_state(BotState::UsingPotions);
             }
             _ => {}
         }
+        self.last_frame = Some(frame.clone());
     }
 
     pub fn draw_detection_gap(&self, frame: &mut RgbaImage) {

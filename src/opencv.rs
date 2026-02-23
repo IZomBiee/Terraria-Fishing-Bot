@@ -1,4 +1,4 @@
-use image::{GrayImage, Luma, RgbImage, Rgba, RgbaImage};
+use image::{GrayImage, ImageBuffer, Luma, RgbImage, Rgba, RgbaImage};
 
 pub fn rgba_2_hsva(img: &RgbaImage) -> RgbaImage {
     let (width, height) = img.dimensions();
@@ -58,7 +58,7 @@ pub fn rgba_difference_mask(img1: &RgbaImage, img2: &RgbaImage) -> GrayImage {
         let distance = (r_diff + g_diff + b_diff).sqrt();
         let result = distance.min(255.0) as u8;
 
-        mask.put_pixel(x, y,Luma([result]));
+        mask.put_pixel(x, y, Luma([result]));
     }
 
     mask
@@ -84,7 +84,7 @@ pub fn rgb_difference_mask(img1: &RgbImage, img2: &RgbImage) -> GrayImage {
         let distance = (r_diff + g_diff + b_diff).sqrt();
         let result = distance.min(255.0) as u8;
 
-        mask.put_pixel(x, y,Luma([result]));
+        mask.put_pixel(x, y, Luma([result]));
     }
 
     mask
@@ -114,23 +114,25 @@ pub fn circle(img: &mut RgbaImage, center_x: u32, center_y: u32, radius: i32) {
     }
 }
 
-pub fn hsva_in_range(hsva_data: &[u8], lower: [u8; 3], upper: [u8; 3]) -> Vec<u8> {
-    let mut mask = Vec::with_capacity(hsva_data.len() / 4);
+pub fn rgba_in_range(frame: &RgbaImage, lower: [u8; 4], upper: [u8; 4]) -> GrayImage {
+    let (width, height) = frame.dimensions();
+    let raw_data = frame.as_raw();
 
-    for chunk in hsva_data.chunks_exact(4) {
-        let h = chunk[0];
-        let s = chunk[1];
-        let v = chunk[2];
+    let mut mask_pixels = Vec::with_capacity((width * height) as usize);
 
-        let is_in_range = h >= lower[0]
-            && h <= upper[0]
-            && s >= lower[1]
-            && s <= upper[1]
-            && v >= lower[2]
-            && v <= upper[2];
+    for chunk in raw_data.chunks_exact(4) {
+        let is_in_range = chunk[0] >= lower[0]
+            && chunk[0] <= upper[0]
+            && chunk[1] >= lower[1]
+            && chunk[1] <= upper[1]
+            && chunk[2] >= lower[2]
+            && chunk[2] <= upper[2]
+            && chunk[3] >= lower[3]
+            && chunk[3] <= upper[3];
 
-        mask.push(if is_in_range { 255 } else { 0 });
+        mask_pixels.push(if is_in_range { 255 } else { 0 });
     }
 
-    mask
+    ImageBuffer::<Luma<u8>, Vec<u8>>::from_raw(width, height, mask_pixels)
+        .expect("Buffer size should match dimensions")
 }
