@@ -78,21 +78,8 @@ impl<'a> Bot<'a> {
         Some(mean)
     }
 
-    fn get_mean_noise_level(&mut self) -> Option<u32> {
-        let count = self.noises.len() as u32;
-        if count <= 3 {
-            return None;
-        };
-        // self.noises.sort();
-        // let mean: u32 = if count.is_multiple_of(2) {
-        //     (self.noises[(count as f32 / 2f32) as usize]
-        //         + self.noises[((count as f32 / 2f32) as usize) + 1])
-        //         / 2
-        // } else {
-        //     self.noises[(count as f32 / 2f32) as usize]
-        // };
-        let sum = self.noises.iter().sum::<u32>();
-        Some(sum / count)
+    fn get_max_noise_level(&mut self) -> Option<u32> {
+        self.noises.iter().max().cloned()
     }
 
     fn get_detection_gap(&mut self) -> Option<(u32, u32)> {
@@ -157,7 +144,7 @@ impl<'a> Bot<'a> {
 
                 if Instant::now() - time > Duration::from_millis(self.settings.noises_delay_millis)
                 {
-                    if let Some(mean_noise_level) = self.get_mean_noise_level() {
+                    if let Some(mean_noise_level) = self.get_max_noise_level() {
                         println!("The noise level is {}.", mean_noise_level);
                         self.set_state(BotState::UsingPotions);
                     } else {
@@ -192,14 +179,14 @@ impl<'a> Bot<'a> {
                     return;
                 };
 
-                if let Some(noise) = self.get_mean_noise_level() {
+                if let Some(noise) = self.get_max_noise_level() {
                     println!(
                         "Difference: {} Noise: {} Threshold: {}",
                         abs_difference,
                         noise,
-                        (noise + 50) * 3
+                        noise + self.settings.detection_threshold
                     );
-                    if abs_difference > (noise + 50) * 3 {
+                    if abs_difference > noise + self.settings.detection_threshold {
                         self.set_state(BotState::Reeling);
                     }
                 } else {

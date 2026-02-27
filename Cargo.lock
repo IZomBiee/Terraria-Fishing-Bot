@@ -3768,7 +3768,7 @@ dependencies = [
 
 [[package]]
 name = "terraria_fishing_bot"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "device_query",
  "enigo",

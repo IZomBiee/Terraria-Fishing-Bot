@@ -1,3 +1,5 @@
+#![allow(warnings)]
+
 use image::{GrayImage, RgbImage};
 use ocrs::{ImageSource, OcrEngine, OcrEngineParams};
 use rten::Model;
