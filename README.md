@@ -10,7 +10,7 @@ Terraria advanced fising bot writted fully on Rust. Made to practise/learn Rust.
 - [ ] Fast unload to nearbay chests
 - [ ] Handle events (Bloodmon, Invesions)
 - [ ] Working with sonar potion
-- [ ] Saving settings
+- [x] Saving settings
 
 ## Preview
 

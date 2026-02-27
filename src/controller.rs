@@ -38,6 +38,7 @@ impl<'a> Controller<'a> {
     }
 
     pub fn use_potions(&self) {
+        return;
         let mut enigo = Enigo::new(&enigo::Settings::default()).unwrap();
 
         if enigo

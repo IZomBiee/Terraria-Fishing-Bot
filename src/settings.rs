@@ -7,10 +7,12 @@ pub struct Settings {
     pub monitor_id: u8,
     pub fps: u8,
     pub casting_delay_millis: u64,
-    pub catch_threshold: u32,
-    pub liquid_threshold: u32,
     pub liquid_offset: i32,
+    pub liquid_detection_delay_millis: u64,
+    pub noises_delay_millis: u64,
     pub detection_gap_size: u32,
+    pub detection_model_path: String,
+    pub rec_model_path: String,
 }
 
 impl Default for Settings {
@@ -20,10 +22,12 @@ impl Default for Settings {
             monitor_id: 1,
             fps: 5,
             casting_delay_millis: 1000,
-            catch_threshold: 200,
-            liquid_threshold: 20,
-            liquid_offset: -5,
+            liquid_offset: -15,
+            liquid_detection_delay_millis: 3000,
+            noises_delay_millis: 5000,
             detection_gap_size: 40,
+            detection_model_path: "assets\\text-detection-ssfbcj81.onnx".to_owned(),
+            rec_model_path: "assets\\text-rec-checkpoint-s52qdbqt.onnx".to_owned(),
         }
     }
 }
