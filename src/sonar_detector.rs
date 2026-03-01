@@ -8,13 +8,13 @@ use std::{fs, io::Read, str::FromStr};
 
 use crate::settings;
 
-pub struct SonarDetector {
-    settings: Settings,
+pub struct SonarDetector<'a> {
+    settings: &'a Settings,
     engine: OcrEngine,
 }
 
-impl SonarDetector {
-    fn new(settings: Settings) -> Self {
+impl<'a> SonarDetector<'a> {
+    pub fn new(settings: &'a Settings) -> Self {
         let detection_model_data = fs::read(&settings.detection_model_path)
             .expect(&format!("Can't load {}!", &settings.detection_model_path));
         let rec_model_data = fs::read(&settings.rec_model_path)
@@ -33,7 +33,7 @@ impl SonarDetector {
         return SonarDetector { settings, engine };
     }
 
-    fn get_text_from_frame(&mut self, frame: &RgbImage) -> Vec<String> {
+    pub fn get_text_from_frame(&mut self, frame: &RgbImage) -> Vec<String> {
         let img_source = ImageSource::from_bytes(frame.as_raw(), frame.dimensions()).unwrap();
         let input = self.engine.prepare_input(img_source).unwrap();
         let text = self.engine.get_text(&input).unwrap_or(String::new());
@@ -54,7 +54,8 @@ mod tests {
 
     #[test]
     fn find_bass() {
-        let mut detector = SonarDetector::new(Settings::default());
+        let settings = Settings::default();
+        let mut detector = SonarDetector::new(&settings);
 
         let img = image::open("assets\\sonar_bass.png")
             .expect("Can't load image!")
@@ -71,7 +72,8 @@ mod tests {
 
     #[test]
     fn find_bomb_fish() {
-        let mut detector = SonarDetector::new(Settings::default());
+        let settings = Settings::default();
+        let mut detector = SonarDetector::new(&settings);
 
         let img = image::open("assets\\sonar_bomb_fish.png")
             .expect("Can't load image!")
@@ -88,7 +90,8 @@ mod tests {
 
     #[test]
     fn find_base_text() {
-        let mut detector = SonarDetector::new(Settings::default());
+        let settings = Settings::default();
+        let mut detector = SonarDetector::new(&settings);
 
         let img = image::open("assets\\base_text.png")
             .expect("Can't load image!")

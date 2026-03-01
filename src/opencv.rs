@@ -1,4 +1,4 @@
-use image::{GrayImage, ImageBuffer, Luma, RgbImage, Rgba, RgbaImage};
+use image::{GrayImage, ImageBuffer, Luma, Pixel, RgbImage, Rgba, RgbaImage};
 
 pub fn rgba_2_hsva(img: &RgbaImage) -> RgbaImage {
     let (width, height) = img.dimensions();
@@ -35,6 +35,18 @@ pub fn rgba_2_hsva(img: &RgbaImage) -> RgbaImage {
     }
 
     hsva_img
+}
+
+pub fn rgba_2_rgb(rgba: &RgbaImage) -> RgbImage {
+    let (width, height) = rgba.dimensions();
+    let mut rgb = RgbImage::new(width, height);
+
+    for (x, y, pixel) in rgba.enumerate_pixels() {
+        let channels = pixel.channels();
+        rgb.put_pixel(x, y, image::Rgb([channels[0], channels[1], channels[2]]));
+    }
+
+    rgb
 }
 
 pub fn rgba_difference_mask(img1: &RgbaImage, img2: &RgbaImage) -> GrayImage {

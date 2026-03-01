@@ -12,6 +12,8 @@ pub struct Settings {
     pub noises_delay_millis: u64,
     pub detection_threshold: u32,
     pub detection_gap_size: u32,
+    pub use_sonar: bool,
+    pub use_potions: bool,
     pub detection_model_path: String,
     pub rec_model_path: String,
 }
@@ -21,13 +23,15 @@ impl Default for Settings {
         Self {
             margin: 100,
             monitor_id: 1,
-            fps: 5,
+            fps: 30,
             casting_delay_millis: 1000,
-            liquid_offset: -10,
-            liquid_detection_delay_millis: 3000,
-            noises_delay_millis: 10000,
-            detection_threshold: 400,
-            detection_gap_size: 40,
+            liquid_offset: -5,
+            liquid_detection_delay_millis: 500,
+            noises_delay_millis: 2000,
+            detection_threshold: 150,
+            detection_gap_size: 20,
+            use_sonar: false,
+            use_potions: false,
             detection_model_path: "assets\\text-detection-ssfbcj81.onnx".to_owned(),
             rec_model_path: "assets\\text-rec-checkpoint-s52qdbqt.onnx".to_owned(),
         }
@@ -43,7 +47,9 @@ impl Settings {
             }),
             Err(_) => {
                 println!("Can't read {}, using defaults.", path);
-                Self::default()
+                let default = Self::default();
+                default.save_to_file(path);
+                default
             }
         }
     }

@@ -1,10 +1,12 @@
 use device_query::{DeviceQuery, DeviceState, Keycode};
-
 use show_image::{ImageView, create_window};
+use std::thread::sleep;
+use std::time::Duration;
 use terraria_fishing_bot::bot::Bot;
 use terraria_fishing_bot::controller::Controller;
 use terraria_fishing_bot::cursor_capturer::CursorCapturer;
 use terraria_fishing_bot::settings::Settings;
+use terraria_fishing_bot::sonar_detector::SonarDetector;
 
 #[show_image::main]
 fn main() {
@@ -14,17 +16,26 @@ fn main() {
     let mut capturer = CursorCapturer::new(&settings);
     let controller = Controller::new(&settings);
 
-    let mut bot = Bot::new(&settings, controller, None);
+    let mut bot = Bot::new(
+        &settings,
+        controller,
+        if settings.use_sonar {
+            Some(SonarDetector::new(&settings))
+        } else {
+            None
+        },
+    );
 
     let device_state = DeviceState::new();
 
-    println!("Press Q to start, R to stop, P to exit.");
+    println!("Press Q to start/stop, P to exit.");
     loop {
         let keys = device_state.get_keys();
         if keys.contains(&Keycode::Q) {
-            bot.start();
-        } else if keys.contains(&Keycode::R) {
-            bot.stop();
+            sleep(Duration::from_millis(500));
+            if !bot.start() {
+                bot.stop();
+            }
         } else if keys.contains(&Keycode::P) {
             settings.save_to_file("settings.json");
             std::process::exit(0);
