@@ -3,7 +3,7 @@ use crate::{controller::Controller, opencv, settings::Settings, sonar_detector::
 use image::{GrayImage, RgbaImage};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::Receiver;
+
 use std::{
     sync::{Arc, Mutex},
     time::{Duration, Instant},

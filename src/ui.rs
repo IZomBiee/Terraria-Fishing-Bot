@@ -1,5 +1,5 @@
 use device_query::{DeviceQuery, DeviceState, Keycode};
-use std::os::windows::thread;
+use eframe::egui::Vec2;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -16,12 +16,12 @@ pub fn run(
     is_running: Arc<AtomicBool>,
 ) -> eframe::Result {
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([1000.0, 400.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([660.0, 400.0]),
         ..Default::default()
     };
 
     eframe::run_native(
-        "Terraria Fishing Bot",
+        "Terraria-Fishing-Bot",
         options,
         Box::new(|cc| {
             egui_extras::install_image_loaders(&cc.egui_ctx);
@@ -34,7 +34,6 @@ pub fn run(
         }),
     )
 }
-
 struct App {
     settings: Arc<Mutex<Settings>>,
     texture: Option<egui::TextureHandle>,
@@ -198,18 +197,6 @@ impl eframe::App for App {
             self.update_preview(ctx, &rgba_img);
         }
 
-        SidePanel::right("right_panel")
-            .resizable(false)
-            .show(ctx, |ui| {
-                ui.vertical_centered(|ui| {
-                    ui.label(
-                        egui::RichText::new("Detection")
-                            .color(egui::Color32::WHITE)
-                            .size(18f32),
-                    );
-                });
-                self.detection_contents(ui);
-            });
         SidePanel::left("left_panel")
             .resizable(false)
             .show(ctx, |ui| {
@@ -220,20 +207,40 @@ impl eframe::App for App {
                             .size(18f32),
                     );
                 });
+
                 self.general_contents(ui);
+
+                ui.vertical_centered(|ui| {
+                    ui.label(
+                        egui::RichText::new("Detection")
+                            .color(egui::Color32::WHITE)
+                            .size(18f32),
+                    );
+                });
+
+                self.detection_contents(ui);
+
+                ui.vertical_centered(|ui| {
+                    ui.label(
+                        egui::RichText::new("Info")
+                            .color(egui::Color32::WHITE)
+                            .size(18f32),
+                    );
+                });
+
+                self.information_contents(ui);
             });
 
         CentralPanel::default().show(ctx, |ui| {
             if let Some(texture) = &self.texture {
-                ui.add(egui::Image::from_texture(texture));
+                ui.add(
+                    egui::Image::from_texture(texture).fit_to_exact_size(Vec2::new(385.0, 385.0)),
+                );
             } else {
                 ui.label("Waiting for screen capture...");
             }
         });
-        egui::Window::new("Information").show(ctx, |ui| {
-            self.information_contents(ui);
-        });
 
-        ctx.request_repaint()
+        // ctx.request_repaint();
     }
 }
