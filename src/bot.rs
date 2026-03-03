@@ -1,6 +1,13 @@
+use crate::cursor_capturer::SharedFrame;
 use crate::{controller::Controller, opencv, settings::Settings, sonar_detector::SonarDetector};
 use image::{GrayImage, RgbaImage};
-use std::time::{Duration, Instant};
+use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::Receiver;
+use std::{
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
 use strum_macros::AsRefStr;
 
 #[derive(Debug, PartialEq, AsRefStr)]
@@ -15,24 +22,43 @@ pub enum BotState {
     CheckingNoise(Instant),
     UsingPotions,
 }
-pub struct Bot<'a> {
+
+pub enum BotCommand {
+    Start,
+    Stop,
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub enum DetectionMethod {
+    MoveMap,
+    Yolo,
+    Sonar,
+}
+
+pub struct Bot {
+    pub shared_frame: SharedFrame,
+    pub is_running: Arc<AtomicBool>,
     pub state: BotState,
-    pub settings: &'a Settings,
-    pub controller: Controller<'a>,
-    pub sonar_detector: Option<SonarDetector<'a>>,
+    pub settings: Arc<Mutex<Settings>>,
+    pub controller: Controller,
+    pub sonar_detector: Option<SonarDetector>,
     liquid_levels: Vec<u32>,
     noises: Vec<u32>,
     last_frame: Option<RgbaImage>,
     last_potion_use_time: Option<Instant>,
 }
 
-impl<'a> Bot<'a> {
+impl Bot {
     pub fn new(
-        settings: &'a Settings,
-        controller: Controller<'a>,
-        sonar_detector: Option<SonarDetector<'a>>,
-    ) -> Bot<'a> {
+        shared_frame: SharedFrame,
+        is_running: Arc<AtomicBool>,
+        settings: Arc<Mutex<Settings>>,
+        controller: Controller,
+        sonar_detector: Option<SonarDetector>,
+    ) -> Bot {
         Bot {
+            shared_frame,
+            is_running,
             state: BotState::Idle,
             settings,
             controller,
@@ -41,6 +67,25 @@ impl<'a> Bot<'a> {
             noises: Vec::new(),
             last_frame: None,
             last_potion_use_time: None,
+        }
+    }
+
+    pub fn run(&mut self) {
+        loop {
+            if self.is_running.load(Ordering::Relaxed) {
+                self.start();
+            } else {
+                self.stop();
+            }
+            let maybe_img = self
+                .shared_frame
+                .lock()
+                .ok()
+                .and_then(|guard| guard.clone()); // Clones the Option<ImageBuffer>
+
+            if let Some(rgba_img) = maybe_img {
+                self.update(&rgba_img);
+            }
         }
     }
 
@@ -83,9 +128,13 @@ impl<'a> Bot<'a> {
     }
 
     fn get_detection_gap(&self) -> Option<(u32, u32)> {
+        let Ok(settings) = self.settings.lock() else {
+            return None;
+        };
+
         if let Some(liquid_level) = self.get_mean_liquid_level() {
-            let liquid_level = liquid_level as i32 + self.settings.liquid_offset;
-            let gap = liquid_level - self.settings.detection_gap_size as i32;
+            let liquid_level = liquid_level as i32 + settings.liquid_offset;
+            let gap = liquid_level - settings.detection_gap_size as i32;
             if liquid_level > 0 {
                 return Some((std::cmp::max(gap, 0) as u32, liquid_level as u32));
             }
@@ -120,6 +169,25 @@ impl<'a> Bot<'a> {
             return;
         };
 
+        let (
+            liquid_detection_delay_millis,
+            noises_delay_millis,
+            casting_delay_millis,
+            use_potions,
+            detection_threshold,
+        ) = {
+            let Ok(settings) = self.settings.lock() else {
+                return;
+            };
+            (
+                settings.liquid_detection_delay_millis,
+                settings.noises_delay_millis,
+                settings.casting_delay_millis,
+                settings.use_potions,
+                settings.detection_threshold,
+            )
+        };
+
         match self.state {
             BotState::CheckingLiquidLevel(time) => {
                 if let Some(level) = Bot::get_liquid_level(difference_mask) {
@@ -127,9 +195,7 @@ impl<'a> Bot<'a> {
                     self.liquid_levels.sort();
                 }
 
-                if Instant::now() - time
-                    > Duration::from_millis(self.settings.liquid_detection_delay_millis)
-                {
+                if Instant::now() - time > Duration::from_millis(liquid_detection_delay_millis) {
                     if let Some(mean_liquid_level) = self.get_mean_liquid_level() {
                         println!("The liquid level is {}.", mean_liquid_level);
                         self.set_state(BotState::CheckingNoise(Instant::now()));
@@ -143,8 +209,7 @@ impl<'a> Bot<'a> {
                     self.noises.push(level);
                 }
 
-                if Instant::now() - time > Duration::from_millis(self.settings.noises_delay_millis)
-                {
+                if Instant::now() - time > Duration::from_millis(noises_delay_millis) {
                     if let Some(max_noise_level) = self.get_max_noise_level() {
                         println!("The noise level is {}.", max_noise_level);
                         self.set_state(BotState::UsingPotions);
@@ -154,7 +219,7 @@ impl<'a> Bot<'a> {
                 }
             }
             BotState::UsingPotions => {
-                if self.settings.use_potions {
+                if use_potions {
                     if let Some(last_potion_use_time) = self.last_potion_use_time {
                         if Instant::now() - last_potion_use_time > Duration::from_mins(4) {
                             self.controller.use_potions();
@@ -173,8 +238,7 @@ impl<'a> Bot<'a> {
                 self.set_state(BotState::CastingCooldown(Instant::now()))
             }
             BotState::CastingCooldown(time) => {
-                if Instant::now() - time > Duration::from_millis(self.settings.casting_delay_millis)
-                {
+                if Instant::now() - time > Duration::from_millis(casting_delay_millis) {
                     self.set_state(BotState::WaitingForBite);
                 };
             }
@@ -194,12 +258,12 @@ impl<'a> Bot<'a> {
                     };
 
                     if let Some(noise) = self.get_max_noise_level() {
-                        if abs_difference > noise + self.settings.detection_threshold {
+                        if abs_difference > noise + detection_threshold {
                             println!(
                                 "Difference: {} Noise: {} Threshold: {}",
                                 abs_difference,
                                 noise,
-                                noise + self.settings.detection_threshold
+                                noise + detection_threshold
                             );
                             self.set_state(BotState::Reeling);
                         }
@@ -253,6 +317,7 @@ impl<'a> Bot<'a> {
             println!("Stoping bot!");
             self.liquid_levels.clear();
             self.noises.clear();
+            self.last_potion_use_time = None;
             self.set_state(BotState::Idle);
         }
     }

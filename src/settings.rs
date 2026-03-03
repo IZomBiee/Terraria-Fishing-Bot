@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 
+use crate::bot;
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Settings {
     pub margin: u32,
@@ -14,8 +16,7 @@ pub struct Settings {
     pub detection_gap_size: u32,
     pub use_sonar: bool,
     pub use_potions: bool,
-    pub detection_model_path: String,
-    pub rec_model_path: String,
+    pub detection_method: bot::DetectionMethod,
 }
 
 impl Default for Settings {
@@ -32,8 +33,7 @@ impl Default for Settings {
             detection_gap_size: 20,
             use_sonar: false,
             use_potions: false,
-            detection_model_path: "assets\\text-detection-ssfbcj81.onnx".to_owned(),
-            rec_model_path: "assets\\text-rec-checkpoint-s52qdbqt.onnx".to_owned(),
+            detection_method: bot::DetectionMethod::MoveMap,
         }
     }
 }
