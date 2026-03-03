@@ -1,19 +1,19 @@
 use device_query::{DeviceQuery, DeviceState, Keycode};
 use eframe::egui::Vec2;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::sync::{Arc, Mutex, mpsc::Sender};
+use std::time::{Duration, Instant};
 
 use eframe::{egui, egui::panel::*};
 
-use crate::bot::DetectionMethod;
+use crate::bot::{self, BotCommand, BotState, DetectionMethod};
 use crate::cursor_capturer::SharedFrame;
 use crate::settings::Settings;
 
 pub fn run(
+    tx: Sender<bot::BotCommand>,
     settings: Arc<Mutex<Settings>>,
     shared_frame: SharedFrame,
-    is_running: Arc<AtomicBool>,
+    shared_state: Arc<Mutex<BotState>>,
 ) -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([660.0, 400.0]),
@@ -26,19 +26,23 @@ pub fn run(
         Box::new(|cc| {
             egui_extras::install_image_loaders(&cc.egui_ctx);
             Ok(Box::new(App {
+                tx,
                 settings,
                 texture: None,
-                is_running,
                 shared_frame,
+                shared_state,
+                last_toggle_key_time: None,
             }))
         }),
     )
 }
 struct App {
+    tx: Sender<BotCommand>,
     settings: Arc<Mutex<Settings>>,
     texture: Option<egui::TextureHandle>,
-    is_running: Arc<AtomicBool>,
     shared_frame: SharedFrame,
+    shared_state: Arc<Mutex<BotState>>,
+    last_toggle_key_time: Option<Instant>,
 }
 
 impl App {
@@ -56,7 +60,7 @@ impl App {
         }
     }
 
-    fn detection_contents(&mut self, ui: &mut egui::Ui) {
+    fn detection_contents(&mut self, ui: &mut egui::Ui, state: BotState) {
         let Ok(mut settings) = self.settings.lock() else {
             return;
         };
@@ -122,7 +126,7 @@ impl App {
             });
     }
 
-    fn general_contents(&mut self, ui: &mut egui::Ui) {
+    fn general_contents(&mut self, ui: &mut egui::Ui, state: BotState) {
         let Ok(mut settings) = self.settings.lock() else {
             return;
         };
@@ -147,25 +151,30 @@ impl App {
             });
     }
 
-    fn information_contents(&mut self, ui: &mut egui::Ui) {
+    fn information_contents(&mut self, ui: &mut egui::Ui, state: BotState) {
         egui::Grid::new("information_grid")
             .num_columns(2)
             .show(ui, |ui| {
-                ui.label("Status:");
-                ui.label("None");
+                ui.label("State:");
+                ui.label(format!("{:?}", state));
                 ui.end_row();
             });
-        if self.is_running.load(Ordering::Relaxed)
-            && ui
-                .button("Disable bot")
-                .on_hover_text("Hotkey: P")
-                .clicked()
-        {
-            self.is_running.store(false, Ordering::Relaxed);
-        } else if !self.is_running.load(Ordering::Relaxed)
-            && ui.button("Enable bot").on_hover_text("Hotkey: P").clicked()
-        {
-            self.is_running.store(true, Ordering::Relaxed);
+
+        match state {
+            BotState::Idle => {
+                if ui.button("Enable bot").on_hover_text("Hotkey: P").clicked() {
+                    let _ = self.tx.send(BotCommand::Start);
+                }
+            }
+            _ => {
+                if ui
+                    .button("Disable bot")
+                    .on_hover_text("Hotkey: P")
+                    .clicked()
+                {
+                    let _ = self.tx.send(BotCommand::Stop);
+                }
+            }
         }
     }
 }
@@ -179,12 +188,24 @@ impl eframe::App for App {
     }
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        let state = *self.shared_state.lock().expect("Mutex poison");
+
         let device_state = DeviceState::new();
         let keys = device_state.get_keys();
         if keys.contains(&Keycode::P) {
-            self.is_running
-                .store(!self.is_running.load(Ordering::Relaxed), Ordering::Relaxed);
-            std::thread::sleep(Duration::from_millis(300));
+            if self.last_toggle_key_time.is_none()
+                || self.last_toggle_key_time.unwrap().elapsed() > Duration::from_millis(100)
+            {
+                match state {
+                    BotState::Idle => {
+                        let _ = self.tx.send(BotCommand::Start);
+                    }
+                    _ => {
+                        let _ = self.tx.send(BotCommand::Stop);
+                    }
+                }
+            }
+            self.last_toggle_key_time = Some(Instant::now());
         };
 
         let maybe_img = self
@@ -208,7 +229,7 @@ impl eframe::App for App {
                     );
                 });
 
-                self.general_contents(ui);
+                self.general_contents(ui, state);
 
                 ui.vertical_centered(|ui| {
                     ui.label(
@@ -218,7 +239,7 @@ impl eframe::App for App {
                     );
                 });
 
-                self.detection_contents(ui);
+                self.detection_contents(ui, state);
 
                 ui.vertical_centered(|ui| {
                     ui.label(
@@ -228,7 +249,7 @@ impl eframe::App for App {
                     );
                 });
 
-                self.information_contents(ui);
+                self.information_contents(ui, state);
             });
 
         CentralPanel::default().show(ctx, |ui| {
@@ -241,6 +262,6 @@ impl eframe::App for App {
             }
         });
 
-        // ctx.request_repaint();
+        ctx.request_repaint();
     }
 }

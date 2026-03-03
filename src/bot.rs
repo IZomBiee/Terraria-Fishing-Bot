@@ -2,15 +2,14 @@ use crate::cursor_capturer::SharedFrame;
 use crate::{controller::Controller, opencv, settings::Settings, sonar_detector::SonarDetector};
 use image::{GrayImage, RgbaImage};
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicBool, Ordering};
 
 use std::{
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, mpsc::Receiver},
     time::{Duration, Instant},
 };
 use strum_macros::AsRefStr;
 
-#[derive(Debug, PartialEq, AsRefStr)]
+#[derive(Debug, PartialEq, AsRefStr, Clone, Copy)]
 pub enum BotState {
     Idle,
     WaitingForBite,
@@ -28,7 +27,7 @@ pub enum BotCommand {
     Stop,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub enum DetectionMethod {
     MoveMap,
     Yolo,
@@ -36,12 +35,12 @@ pub enum DetectionMethod {
 }
 
 pub struct Bot {
+    rx: Receiver<BotCommand>,
     pub shared_frame: SharedFrame,
-    pub is_running: Arc<AtomicBool>,
-    pub state: BotState,
+    pub state: Arc<Mutex<BotState>>,
     pub settings: Arc<Mutex<Settings>>,
     pub controller: Controller,
-    pub sonar_detector: Option<SonarDetector>,
+    pub sonar_detector: SonarDetector,
     liquid_levels: Vec<u32>,
     noises: Vec<u32>,
     last_frame: Option<RgbaImage>,
@@ -50,16 +49,17 @@ pub struct Bot {
 
 impl Bot {
     pub fn new(
+        rx: Receiver<BotCommand>,
+        shared_state: Arc<Mutex<BotState>>,
         shared_frame: SharedFrame,
-        is_running: Arc<AtomicBool>,
         settings: Arc<Mutex<Settings>>,
         controller: Controller,
-        sonar_detector: Option<SonarDetector>,
+        sonar_detector: SonarDetector,
     ) -> Bot {
         Bot {
+            rx,
             shared_frame,
-            is_running,
-            state: BotState::Idle,
+            state: shared_state,
             settings,
             controller,
             sonar_detector,
@@ -72,11 +72,6 @@ impl Bot {
 
     pub fn run(&mut self) {
         loop {
-            if self.is_running.load(Ordering::Relaxed) {
-                self.start();
-            } else {
-                self.stop();
-            }
             let maybe_img = self
                 .shared_frame
                 .lock()
@@ -91,7 +86,8 @@ impl Bot {
 
     fn set_state(&mut self, new_state: BotState) {
         println!("Bot state: {}", new_state.as_ref());
-        self.state = new_state;
+        let mut state = self.state.lock().expect("Mutex poison, can't write state!");
+        *state = new_state;
     }
 
     fn get_liquid_level(mask: &GrayImage) -> Option<u32> {
@@ -163,39 +159,79 @@ impl Bot {
         Some(opencv::rgba_difference_mask(current_frame, last_image))
     }
 
+    fn waiting_for_bite_logic(&mut self, last_frame: &RgbaImage, difference_mask: &GrayImage) {
+        let (detection_method, detection_threshold) = {
+            let settings = self.settings.lock().expect("Mutex poison");
+            (
+                settings.detection_method.clone(),
+                settings.detection_threshold,
+            )
+        };
+
+        match detection_method {
+            DetectionMethod::MoveMap => {
+                let abs_difference = self.get_abs_difference(difference_mask);
+
+                let Some(abs_difference) = abs_difference else {
+                    println!("No liquid level!");
+                    self.controller.catch();
+                    self.set_state(BotState::CheckingLiquidLevel(Instant::now()));
+                    return;
+                };
+
+                if let Some(noise) = self.get_max_noise_level() {
+                    if abs_difference > noise + detection_threshold {
+                        self.set_state(BotState::Reeling);
+                    }
+                } else {
+                    println!("No noise level!");
+                    self.controller.catch();
+                    self.set_state(BotState::CheckingNoise(Instant::now()));
+                }
+            }
+            _ => {
+                todo!()
+            }
+        }
+    }
+
+    fn handle_commands(&mut self) {
+        if let Ok(cmd) = self.rx.try_recv() {
+            match cmd {
+                BotCommand::Start => {
+                    self.start();
+                }
+                BotCommand::Stop => {
+                    self.stop();
+                }
+            }
+        }
+    }
+
     pub fn update(&mut self, frame: &RgbaImage) {
         let Some(difference_mask) = &self.get_difference_mask(frame) else {
             self.last_frame = Some(frame.clone());
             return;
         };
 
-        let (
-            liquid_detection_delay_millis,
-            noises_delay_millis,
-            casting_delay_millis,
-            use_potions,
-            detection_threshold,
-        ) = {
-            let Ok(settings) = self.settings.lock() else {
-                return;
-            };
-            (
-                settings.liquid_detection_delay_millis,
-                settings.noises_delay_millis,
-                settings.casting_delay_millis,
-                settings.use_potions,
-                settings.detection_threshold,
-            )
-        };
+        self.handle_commands();
 
-        match self.state {
+        let current_state = *self.state.lock().expect("Mutex poison, can't read state!");
+
+        // 3. Match on the local copy of the state to prevent deadlocks when calling `set_state`.
+        match current_state {
             BotState::CheckingLiquidLevel(time) => {
                 if let Some(level) = Bot::get_liquid_level(difference_mask) {
                     self.liquid_levels.push(level);
-                    self.liquid_levels.sort();
+                    self.liquid_levels.sort(); // Note: Sorting every frame is O(N log N). If N is small, this is fine.
                 }
 
-                if Instant::now() - time > Duration::from_millis(liquid_detection_delay_millis) {
+                let delay = self
+                    .settings
+                    .lock()
+                    .expect("Mutex poison")
+                    .liquid_detection_delay_millis;
+                if time.elapsed() > Duration::from_millis(delay) {
                     if let Some(mean_liquid_level) = self.get_mean_liquid_level() {
                         println!("The liquid level is {}.", mean_liquid_level);
                         self.set_state(BotState::CheckingNoise(Instant::now()));
@@ -204,12 +240,18 @@ impl Bot {
                     }
                 }
             }
+
             BotState::CheckingNoise(time) => {
                 if let Some(level) = self.get_abs_difference(difference_mask) {
                     self.noises.push(level);
                 }
 
-                if Instant::now() - time > Duration::from_millis(noises_delay_millis) {
+                let delay = self
+                    .settings
+                    .lock()
+                    .expect("Mutex poison")
+                    .noises_delay_millis;
+                if time.elapsed() > Duration::from_millis(delay) {
                     if let Some(max_noise_level) = self.get_max_noise_level() {
                         println!("The noise level is {}.", max_noise_level);
                         self.set_state(BotState::UsingPotions);
@@ -218,14 +260,16 @@ impl Bot {
                     }
                 }
             }
+
             BotState::UsingPotions => {
+                let use_potions = self.settings.lock().expect("Mutex poison").use_potions;
+
                 if use_potions {
-                    if let Some(last_potion_use_time) = self.last_potion_use_time {
-                        if Instant::now() - last_potion_use_time > Duration::from_mins(4) {
-                            self.controller.use_potions();
-                            self.last_potion_use_time = Some(Instant::now());
-                        }
-                    } else {
+                    let should_use = self
+                        .last_potion_use_time
+                        .is_none_or(|last_use| last_use.elapsed() > Duration::from_secs(4 * 60));
+
+                    if should_use {
                         self.controller.use_potions();
                         self.last_potion_use_time = Some(Instant::now());
                     }
@@ -233,55 +277,36 @@ impl Bot {
 
                 self.set_state(BotState::Casting);
             }
+
             BotState::Casting => {
                 self.controller.cast();
-                self.set_state(BotState::CastingCooldown(Instant::now()))
+                self.set_state(BotState::CastingCooldown(Instant::now()));
             }
+
             BotState::CastingCooldown(time) => {
-                if Instant::now() - time > Duration::from_millis(casting_delay_millis) {
+                let delay = self
+                    .settings
+                    .lock()
+                    .expect("Mutex poison")
+                    .casting_delay_millis;
+                if time.elapsed() > Duration::from_millis(delay) {
                     self.set_state(BotState::WaitingForBite);
-                };
-            }
-            BotState::WaitingForBite => {
-                if let Some(detector) = &mut self.sonar_detector {
-                    let rgb_frame = &opencv::rgba_2_rgb(frame);
-                    let text = detector.get_text_from_frame(rgb_frame);
-                    println!("Text: {:?}", text);
-                } else {
-                    let abs_difference = self.get_abs_difference(difference_mask);
-
-                    let Some(abs_difference) = abs_difference else {
-                        println!("No liquid level!");
-                        self.controller.catch();
-                        self.set_state(BotState::CheckingLiquidLevel(Instant::now()));
-                        return;
-                    };
-
-                    if let Some(noise) = self.get_max_noise_level() {
-                        if abs_difference > noise + detection_threshold {
-                            println!(
-                                "Difference: {} Noise: {} Threshold: {}",
-                                abs_difference,
-                                noise,
-                                noise + detection_threshold
-                            );
-                            self.set_state(BotState::Reeling);
-                        }
-                    } else {
-                        println!("No noise level!");
-                        self.controller.catch();
-                        self.set_state(BotState::CheckingNoise(Instant::now()));
-                        return;
-                    }
                 }
             }
+
+            BotState::WaitingForBite => {
+                self.waiting_for_bite_logic(frame, difference_mask);
+            }
+
             BotState::Reeling => {
                 self.controller.catch();
-
+                // Assuming looping back to UsingPotions is intentional to prepare for the next cast
                 self.set_state(BotState::UsingPotions);
             }
+
             _ => {}
         }
+
         self.last_frame = Some(frame.clone());
     }
 
@@ -300,20 +325,38 @@ impl Bot {
     }
 
     pub fn start(&mut self) -> bool {
-        if self.state == BotState::Idle {
+        let state = *self.state.lock().expect("Mutex poison");
+        if state == BotState::Idle {
             println!("Starting bot!");
-            if self.sonar_detector.is_none() {
-                self.set_state(BotState::CheckingLiquidLevel(Instant::now()));
-            } else {
-                self.set_state(BotState::UsingPotions);
+
+            let detection_method = {
+                let settings = self
+                    .settings
+                    .lock()
+                    .expect("Mutex poison on waiting bite logic.");
+                settings.detection_method.clone()
+            };
+
+            match detection_method {
+                DetectionMethod::MoveMap => {
+                    self.set_state(BotState::CheckingLiquidLevel(Instant::now()));
+                }
+                DetectionMethod::Sonar => {
+                    self.set_state(BotState::UsingPotions);
+                }
+                _ => {
+                    todo!();
+                }
             }
+
             return true;
         }
         false
     }
 
     pub fn stop(&mut self) {
-        if self.state != BotState::Idle {
+        let state = *self.state.lock().expect("Mutex poison");
+        if state != BotState::Idle {
             println!("Stoping bot!");
             self.liquid_levels.clear();
             self.noises.clear();

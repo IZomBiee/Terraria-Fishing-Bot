@@ -8,8 +8,10 @@ pub mod settings;
 pub mod sonar_detector;
 pub mod ui;
 
-use std::sync::atomic::AtomicBool;
+use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
+
+use crate::bot::BotState;
 
 fn main() {
     let settings = Arc::new(Mutex::new(settings::Settings::load_from_file(
@@ -27,17 +29,28 @@ fn main() {
 
     let controller = controller::Controller::new(Arc::clone(&settings));
 
-    let is_running = Arc::new(AtomicBool::new(false));
+    let sonar_detector = sonar_detector::SonarDetector::new(Arc::clone(&settings));
+
+    let (gui_tx, bot_rx) = mpsc::channel::<bot::BotCommand>();
+    // let (bot_tx, gui_rx) = mpsc::channel::<BotData>();
+
+    let shared_state = Arc::new(Mutex::new(BotState::Idle));
 
     let bot_frame = shared_frame.clone();
     let mut bot = bot::Bot::new(
+        bot_rx,
+        Arc::clone(&shared_state),
         bot_frame,
-        Arc::clone(&is_running),
         Arc::clone(&settings),
         controller,
-        None,
+        sonar_detector,
     );
     std::thread::spawn(move || bot.run());
 
-    let _ = ui::run(Arc::clone(&settings), Arc::clone(&shared_frame), is_running);
+    let _ = ui::run(
+        gui_tx,
+        Arc::clone(&settings),
+        Arc::clone(&shared_frame),
+        Arc::clone(&shared_state),
+    );
 }

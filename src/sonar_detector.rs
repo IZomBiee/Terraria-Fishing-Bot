@@ -4,17 +4,18 @@ use image::{GrayImage, RgbImage};
 use ocrs::{ImageSource, OcrEngine, OcrEngineParams};
 use rten::Model;
 use settings::Settings;
+use std::sync::{Arc, Mutex};
 use std::{fs, io::Read, str::FromStr};
 
 use crate::settings;
 
 pub struct SonarDetector {
-    settings: Settings,
+    settings: Arc<Mutex<Settings>>,
     engine: OcrEngine,
 }
 
 impl SonarDetector {
-    pub fn new(settings: Settings) -> Self {
+    pub fn new(settings: Arc<Mutex<Settings>>) -> Self {
         let detection_model_path = "assets\\text-detection-ssfbcj81.onnx";
         let detection_model_data =
             fs::read(detection_model_path).expect(&format!("Can't load {}!", detection_model_path));
