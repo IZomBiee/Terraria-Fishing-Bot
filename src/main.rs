@@ -7,6 +7,7 @@ pub mod opencv;
 pub mod settings;
 pub mod sonar_detector;
 pub mod ui;
+pub mod ui_terminal;
 
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
@@ -14,8 +15,11 @@ use std::sync::{Arc, Mutex};
 use crate::bot::{BotSended, BotState};
 
 fn main() {
+    let terminal = Arc::new(Mutex::new(ui_terminal::UiTerminal::new(100)));
+
     let settings = Arc::new(Mutex::new(settings::Settings::load_from_file(
         "settings.json",
+        &mut terminal.lock().expect("Mutex poison"),
     )));
     let shared_frame = Arc::new(Mutex::new(None));
 
@@ -40,6 +44,7 @@ fn main() {
     let mut bot = bot::Bot::new(
         bot_rx,
         bot_tx,
+        Arc::clone(&terminal),
         Arc::clone(&shared_state),
         bot_frame,
         Arc::clone(&settings),
@@ -52,6 +57,7 @@ fn main() {
         gui_tx,
         gui_rx,
         Arc::clone(&settings),
+        Arc::clone(&terminal),
         Arc::clone(&shared_frame),
         Arc::clone(&shared_state),
     );

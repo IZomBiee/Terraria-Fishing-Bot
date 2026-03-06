@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::{fs, time::Duration};
 
-use crate::bot;
+use crate::{bot, ui_terminal::UiTerminal};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Settings {
@@ -45,31 +45,40 @@ impl Default for Settings {
 }
 
 impl Settings {
-    pub fn load_from_file(path: &str) -> Self {
+    pub fn load_from_file(path: &str, terminal: &mut UiTerminal) -> Self {
         match fs::read_to_string(path) {
-            Ok(content) => serde_json::from_str(&content).unwrap_or_else(|err| {
-                println!("Failed to parse {}: {}. Using defaults.", path, err);
-                Self::default()
-            }),
+            Ok(content) => match serde_json::from_str(&content) {
+                Ok(file) => {
+                    terminal.print(&format!("Settings from {} successfuly loaded", path));
+                    file
+                }
+                Err(err) => {
+                    terminal.print(&format!(
+                        "Failed to parse {}: {}. Using defaults.",
+                        path, err
+                    ));
+                    Self::default()
+                }
+            },
             Err(_) => {
-                println!("Can't read {}, using defaults.", path);
+                terminal.print(&format!("Can't read {}, using defaults.", path));
                 let default = Self::default();
-                default.save_to_file(path);
+                default.save_to_file(path, terminal);
                 default
             }
         }
     }
 
-    pub fn save_to_file(&self, path: &str) {
+    pub fn save_to_file(&self, path: &str, terminal: &mut UiTerminal) {
         match serde_json::to_string_pretty(self) {
             Ok(json) => {
                 if let Err(e) = fs::write(path, json) {
-                    println!("Failed to write to {}: {}", path, e);
+                    terminal.print(&format!("Failed to write to {}: {}", path, e));
                 } else {
-                    println!("Settings successfully saved to {}", path);
+                    terminal.print(&format!("Settings successfully saved to {}", path));
                 }
             }
-            Err(e) => println!("Failed to serialize settings: {}", e),
+            Err(e) => terminal.print(&format!("Failed to serialize settings: {}", e)),
         }
     }
 }

@@ -8,11 +8,13 @@ use std::time::{Duration, Instant};
 use crate::bot::{self, BotCommand, BotSended, BotState, DetectionMethod};
 use crate::cursor_capturer::SharedFrame;
 use crate::settings::Settings;
+use crate::ui_terminal::UiTerminal;
 
 pub fn run(
     tx: Sender<bot::BotCommand>,
     rx: Receiver<BotSended>,
     settings: Arc<Mutex<Settings>>,
+    terminal: Arc<Mutex<UiTerminal>>,
     shared_frame: SharedFrame,
     shared_state: Arc<Mutex<BotState>>,
 ) -> eframe::Result {
@@ -30,6 +32,7 @@ pub fn run(
                 tx,
                 rx,
                 settings,
+                terminal,
                 texture: None,
                 shared_frame,
                 shared_state,
@@ -43,6 +46,7 @@ struct App {
     tx: Sender<BotCommand>,
     rx: Receiver<BotSended>,
     settings: Arc<Mutex<Settings>>,
+    terminal: Arc<Mutex<UiTerminal>>,
     texture: Option<egui::TextureHandle>,
     shared_frame: SharedFrame,
     shared_state: Arc<Mutex<BotState>>,
@@ -215,14 +219,19 @@ impl App {
                 }
             }
         }
+
+        let terminal = self.terminal.lock().expect("Mutex poison");
+
+        terminal.show(ui);
     }
 }
 
 impl eframe::App for App {
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
-        println!("Saving data before exit...");
+        let mut terminal = self.terminal.lock().expect("Mutex poison");
+        terminal.print("Saving data before exit...");
         if let Ok(settings) = self.settings.lock() {
-            settings.save_to_file("settings.json");
+            settings.save_to_file("settings.json", &mut terminal);
         };
     }
 
@@ -232,9 +241,7 @@ impl eframe::App for App {
         if let Ok(recived) = self.rx.try_recv() {
             match recived {
                 BotSended::LiquidGap(y0, y1) => self.last_liquid_gap = Some((y0, y1)),
-                BotSended::DetectedItems(items) => {
-                    println!("ITEMS: {:?}", items);
-                }
+                BotSended::DetectedItems(_items) => (),
             }
         }
 
