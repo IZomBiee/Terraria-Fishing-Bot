@@ -1,22 +1,23 @@
 use device_query::{DeviceQuery, DeviceState, Keycode};
 use eframe::egui::Vec2;
+use eframe::{egui, egui::panel::*};
+use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex, mpsc::Sender};
 use std::time::{Duration, Instant};
 
-use eframe::{egui, egui::panel::*};
-
-use crate::bot::{self, BotCommand, BotState, DetectionMethod};
+use crate::bot::{self, BotCommand, BotSended, BotState, DetectionMethod};
 use crate::cursor_capturer::SharedFrame;
 use crate::settings::Settings;
 
 pub fn run(
     tx: Sender<bot::BotCommand>,
+    rx: Receiver<BotSended>,
     settings: Arc<Mutex<Settings>>,
     shared_frame: SharedFrame,
     shared_state: Arc<Mutex<BotState>>,
 ) -> eframe::Result {
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([660.0, 400.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([760.0, 500.0]),
         ..Default::default()
     };
 
@@ -27,26 +28,45 @@ pub fn run(
             egui_extras::install_image_loaders(&cc.egui_ctx);
             Ok(Box::new(App {
                 tx,
+                rx,
                 settings,
                 texture: None,
                 shared_frame,
                 shared_state,
                 last_toggle_key_time: None,
+                last_liquid_gap: None,
             }))
         }),
     )
 }
 struct App {
     tx: Sender<BotCommand>,
+    rx: Receiver<BotSended>,
     settings: Arc<Mutex<Settings>>,
     texture: Option<egui::TextureHandle>,
     shared_frame: SharedFrame,
     shared_state: Arc<Mutex<BotState>>,
     last_toggle_key_time: Option<Instant>,
+    last_liquid_gap: Option<(u32, u32)>,
 }
 
 impl App {
-    fn update_preview(&mut self, ctx: &egui::Context, new_frame: &image::RgbaImage) {
+    fn update_preview(&mut self, ctx: &egui::Context, new_frame: &mut image::RgbaImage) {
+        if let Some((y0, y1)) = self.last_liquid_gap
+            && self.settings.lock().expect("Mutex poison").detection_method
+                == DetectionMethod::MoveMap
+        {
+            let (width, height) = new_frame.dimensions();
+
+            for (y, color) in [(y0, [0, 0, 255, 255]), (y1, [255, 0, 0, 255])] {
+                if y < height {
+                    for x in 0..width {
+                        new_frame.put_pixel(x, y, image::Rgba(color));
+                    }
+                }
+            }
+        }
+
         let size = [new_frame.width() as usize, new_frame.height() as usize];
         let pixels = new_frame.as_flat_samples();
 
@@ -60,12 +80,12 @@ impl App {
         }
     }
 
-    fn detection_contents(&mut self, ui: &mut egui::Ui, state: BotState) {
+    fn detection_contents(&mut self, ui: &mut egui::Ui, _state: BotState) {
         let Ok(mut settings) = self.settings.lock() else {
             return;
         };
 
-        egui::Grid::new("detection_grid")
+        egui::Grid::new("detection_grid_1")
             .num_columns(2)
             .show(ui, |ui| {
                 ui.label("Method");
@@ -88,9 +108,13 @@ impl App {
                             "Sonar",
                         );
                     });
-                ui.end_row();
-                match settings.detection_method {
-                    DetectionMethod::MoveMap => {
+            });
+        ui.end_row();
+        match settings.detection_method {
+            DetectionMethod::MoveMap => {
+                egui::Grid::new("detection_grid_2")
+                    .num_columns(2)
+                    .show(ui, |ui| {
                         ui.label("Liquid Offset");
                         ui.add(egui::Slider::new(&mut settings.liquid_offset, -20..=20));
                         ui.end_row();
@@ -119,14 +143,29 @@ impl App {
                             &mut settings.detection_gap_size,
                             10..=100,
                         ));
-                    }
-                    DetectionMethod::Sonar => {}
-                    _ => {}
-                };
-            });
+                    });
+            }
+            DetectionMethod::Sonar => {
+                ui.label("Detection Words");
+                egui::TextEdit::multiline(&mut settings.sonar_detection_words)
+                            .hint_text("Write all items you want to catch and separate by comma(,). Like create, bomb.")
+                            .show(ui);
+                egui::Grid::new("detection_grid_2")
+                    .num_columns(2)
+                    .show(ui, |ui| {
+                        ui.label("Threshold");
+                        ui.add(egui::Slider::new(
+                            &mut settings.sonar_detection_threshold,
+                            0..=10,
+                        ));
+                        ui.end_row();
+                    });
+            }
+            _ => {}
+        };
     }
 
-    fn general_contents(&mut self, ui: &mut egui::Ui, state: BotState) {
+    fn general_contents(&mut self, ui: &mut egui::Ui, _state: BotState) {
         let Ok(mut settings) = self.settings.lock() else {
             return;
         };
@@ -190,6 +229,15 @@ impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let state = *self.shared_state.lock().expect("Mutex poison");
 
+        if let Ok(recived) = self.rx.try_recv() {
+            match recived {
+                BotSended::LiquidGap(y0, y1) => self.last_liquid_gap = Some((y0, y1)),
+                BotSended::DetectedItems(items) => {
+                    println!("ITEMS: {:?}", items);
+                }
+            }
+        }
+
         let device_state = DeviceState::new();
         let keys = device_state.get_keys();
         if keys.contains(&Keycode::P) {
@@ -212,10 +260,10 @@ impl eframe::App for App {
             .shared_frame
             .lock()
             .ok()
-            .and_then(|guard| guard.clone()); // Clones the Option<ImageBuffer>
+            .and_then(|guard| guard.clone());
 
-        if let Some(rgba_img) = maybe_img {
-            self.update_preview(ctx, &rgba_img);
+        if let Some(mut rgba_img) = maybe_img {
+            self.update_preview(ctx, &mut rgba_img);
         }
 
         SidePanel::left("left_panel")

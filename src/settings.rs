@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::fs;
+use std::{fs, time::Duration};
 
 use crate::bot;
 
@@ -17,6 +17,9 @@ pub struct Settings {
     pub use_sonar: bool,
     pub use_potions: bool,
     pub detection_method: bot::DetectionMethod,
+    pub sonar_detection_threshold: usize,
+    pub sonar_detection_words: String,
+    pub cast_max_time: Duration,
 }
 
 impl Default for Settings {
@@ -34,6 +37,9 @@ impl Default for Settings {
             use_sonar: false,
             use_potions: false,
             detection_method: bot::DetectionMethod::MoveMap,
+            sonar_detection_threshold: 5,
+            sonar_detection_words: String::new(),
+            cast_max_time: Duration::from_secs(20),
         }
     }
 }

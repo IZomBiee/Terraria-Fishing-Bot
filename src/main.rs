@@ -1,4 +1,4 @@
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+// #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 pub mod bot;
 pub mod controller;
@@ -11,7 +11,7 @@ pub mod ui;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 
-use crate::bot::BotState;
+use crate::bot::{BotSended, BotState};
 
 fn main() {
     let settings = Arc::new(Mutex::new(settings::Settings::load_from_file(
@@ -29,16 +29,17 @@ fn main() {
 
     let controller = controller::Controller::new(Arc::clone(&settings));
 
-    let sonar_detector = sonar_detector::SonarDetector::new(Arc::clone(&settings));
+    let sonar_detector = sonar_detector::SonarDetector::default();
 
     let (gui_tx, bot_rx) = mpsc::channel::<bot::BotCommand>();
-    // let (bot_tx, gui_rx) = mpsc::channel::<BotData>();
+    let (bot_tx, gui_rx) = mpsc::channel::<BotSended>();
 
     let shared_state = Arc::new(Mutex::new(BotState::Idle));
 
     let bot_frame = shared_frame.clone();
     let mut bot = bot::Bot::new(
         bot_rx,
+        bot_tx,
         Arc::clone(&shared_state),
         bot_frame,
         Arc::clone(&settings),
@@ -49,6 +50,7 @@ fn main() {
 
     let _ = ui::run(
         gui_tx,
+        gui_rx,
         Arc::clone(&settings),
         Arc::clone(&shared_frame),
         Arc::clone(&shared_state),

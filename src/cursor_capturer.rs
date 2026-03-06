@@ -53,7 +53,7 @@ impl CursorCapturer {
     fn capture_logic(&mut self) -> Option<RgbaImage> {
         let (x0, y0, x1, y1) = self.get_region()?;
 
-        let frame = self.monitor.capture_region(x0, y0, x1 - x0, y1 - y0).ok()?; // Use ok() to handle errors gracefully
+        let frame = self.monitor.capture_region(x0, y0, x1 - x0, y1 - y0).ok()?;
 
         self.add_frame_history();
         Some(frame)
