@@ -9,7 +9,7 @@ Terraria advanced fishing bot, written entirely in Rust. Created for practicing/
 - [x] Automatic potion use
 - [ ] Fast unload to nearbay chests
 - [ ] Handle events (Bloodmon, Invesions)
-- [ ] Working with sonar potion
+- [x] Working with sonar potion
 - [x] Saving settings
 
 ## Preview

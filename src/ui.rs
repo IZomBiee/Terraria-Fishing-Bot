@@ -27,6 +27,7 @@ struct App {
     last_toggle_key_time: Option<Instant>,
     last_liquid_gap: Option<(u32, u32)>,
     last_state: BotState,
+    local_settings: Settings,
 }
 
 pub fn run(
@@ -47,11 +48,13 @@ pub fn run(
         options,
         Box::new(|cc| {
             egui_extras::install_image_loaders(&cc.egui_ctx);
+            let local_settings = settings.read().unwrap().clone();
             Ok(Box::new(App {
                 tx,
                 rx,
                 log_rx,
                 settings,
+                local_settings,
                 terminal,
                 texture: None,
                 shared_frame,
@@ -66,7 +69,7 @@ pub fn run(
 impl App {
     fn update_preview(&mut self, ctx: &egui::Context, new_frame: &mut image::RgbaImage) {
         if let Some((y0, y1)) = self.last_liquid_gap
-            && self.settings.read().unwrap().detection_method == DetectionMethod::MoveMap
+            && self.settings.read().unwrap().bot.detection_method == DetectionMethod::MoveMap
         {
             let (width, height) = new_frame.dimensions();
 
@@ -93,33 +96,22 @@ impl App {
     }
 
     fn detection_contents(&mut self, ui: &mut egui::Ui) {
-        let mut settings = self.settings.write().unwrap();
+        let detection_method = &mut self.local_settings.bot.detection_method;
 
         ui.horizontal(|ui| {
             ui.label("Method");
             egui::ComboBox::from_id_salt("method_combobox")
-                .selected_text(format!("{:?}", settings.detection_method))
+                .selected_text(format!("{:?}", detection_method))
                 .show_ui(ui, |ui| {
-                    ui.selectable_value(
-                        &mut settings.detection_method,
-                        DetectionMethod::MoveMap,
-                        "MoveMap",
-                    );
-                    ui.selectable_value(
-                        &mut settings.detection_method,
-                        DetectionMethod::Yolo,
-                        "YOLO",
-                    );
-                    ui.selectable_value(
-                        &mut settings.detection_method,
-                        DetectionMethod::Sonar,
-                        "Sonar",
-                    );
+                    ui.selectable_value(detection_method, DetectionMethod::MoveMap, "MoveMap");
+                    ui.selectable_value(detection_method, DetectionMethod::Yolo, "YOLO");
+                    ui.selectable_value(detection_method, DetectionMethod::Sonar, "Sonar");
                 });
         });
 
-        match settings.detection_method {
+        match detection_method {
             DetectionMethod::MoveMap => {
+                let settings = &mut self.local_settings.movemap;
                 ui.add(
                     egui::Slider::new(&mut settings.liquid_offset, -20..=20).text("Liquid Offset"),
                 );
@@ -145,6 +137,8 @@ impl App {
                 );
             }
             DetectionMethod::Sonar => {
+                let settings = &mut self.local_settings.sonar;
+
                 ui.label("Detection Words");
                 egui::TextEdit::multiline(&mut settings.sonar_detection_words)
                 .hint_text("Write all items you want to catch and separate by comma(,). Like create, bomb.")
@@ -160,15 +154,21 @@ impl App {
     }
 
     fn general_contents(&mut self, ui: &mut egui::Ui) {
-        let mut settings = self.settings.write().unwrap();
-        ui.add(egui::Slider::new(&mut settings.margin, 10..=300).text("Detection Area"));
-        ui.add(egui::Slider::new(&mut settings.fps, 5..=60).text("Framerate"));
         ui.add(
-            egui::Slider::new(&mut settings.casting_delay_millis, 300..=1500).text("Casting Delay"),
+            egui::Slider::new(&mut self.local_settings.capture.margin, 10..=300)
+                .text("Detection Area"),
+        );
+        ui.add(egui::Slider::new(&mut self.local_settings.capture.fps, 5..=60).text("Framerate"));
+        ui.add(
+            egui::Slider::new(
+                &mut self.local_settings.bot.casting_delay_millis,
+                300..=1500,
+            )
+            .text("Casting Delay"),
         );
         ui.horizontal(|ui| {
             ui.label("Use Potions");
-            ui.checkbox(&mut settings.use_potions, "");
+            ui.checkbox(&mut self.local_settings.bot.use_potions, "");
         });
     }
 
@@ -190,6 +190,12 @@ impl App {
                     let _ = self.tx.send(BotCommand::Stop);
                 }
             }
+        }
+    }
+
+    fn sync_local_settings(&mut self) {
+        if self.local_settings != *self.settings.read().unwrap() {
+            *self.settings.write().unwrap() = self.local_settings.clone();
         }
     }
 }
@@ -289,6 +295,8 @@ impl eframe::App for App {
                 ui.label("Waiting for screen capture...");
             }
         });
+
+        self.sync_local_settings();
 
         ctx.request_repaint();
     }

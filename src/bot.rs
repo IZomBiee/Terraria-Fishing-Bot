@@ -146,8 +146,8 @@ impl Bot {
         let settings = self.settings.read().unwrap();
 
         if let Some(liquid_level) = self.get_mean_liquid_level() {
-            let liquid_level = liquid_level as i32 + settings.liquid_offset;
-            let gap = liquid_level - settings.detection_gap_size as i32;
+            let liquid_level = liquid_level as i32 + settings.movemap.liquid_offset;
+            let gap = liquid_level - settings.movemap.detection_gap_size as i32;
             if liquid_level > 0 {
                 return Some((std::cmp::max(gap, 0) as u32, liquid_level as u32));
             }
@@ -177,27 +177,8 @@ impl Bot {
     }
 
     fn waiting_for_bite_logic(&mut self, last_frame: &RgbaImage, difference_mask: &GrayImage) {
-        let (
-            detection_method,
-            detection_threshold,
-            sonar_detector_words,
-            sonar_detector_threshold,
-            cast_max_time,
-            use_potions,
-        ) = {
-            let settings = self.settings.read().unwrap();
-
-            (
-                settings.detection_method.clone(),
-                settings.detection_threshold,
-                settings.sonar_detection_words.clone(),
-                settings.sonar_detection_threshold,
-                settings.cast_max_time,
-                settings.use_potions,
-            )
-        };
-
-        match detection_method {
+        let settings = self.settings.read().unwrap().clone();
+        match settings.bot.detection_method {
             DetectionMethod::MoveMap => {
                 let abs_difference = self.get_abs_difference(difference_mask);
 
@@ -208,7 +189,7 @@ impl Bot {
                 };
 
                 if let Some(noise) = self.get_max_noise_level() {
-                    if abs_difference > noise + detection_threshold {
+                    if abs_difference > noise + settings.movemap.detection_threshold {
                         self.set_state(BotState::Catch);
                     }
                 } else {
@@ -221,16 +202,25 @@ impl Bot {
                     .sonar_detector
                     .get_strings_from_frame(opencv::rgba_2_rgb(last_frame));
 
-                if sonar_detector_words.split(",").any(|string| {
-                    SonarDetector::is_needed_string(string, words.clone(), sonar_detector_threshold)
-                }) {
+                if settings
+                    .sonar
+                    .sonar_detection_words
+                    .split(",")
+                    .any(|string| {
+                        SonarDetector::is_needed_string(
+                            string,
+                            words.clone(),
+                            settings.sonar.sonar_detection_threshold,
+                        )
+                    })
+                {
                     let _ = self.tx.send(UiSended::DetectedItems(words));
                     self.set_state(BotState::Catch);
                 }
 
                 if let Some(time) = self.last_cast_time
-                    && time.elapsed() > cast_max_time
-                    && use_potions
+                    && time.elapsed() > settings.bot.cast_max_time
+                    && settings.bot.use_potions
                 {
                     self.controller.use_potions();
                     self.last_cast_time = Some(Instant::now());
@@ -268,7 +258,12 @@ impl Bot {
                     self.liquid_levels.sort();
                 }
 
-                let delay = self.settings.read().unwrap().liquid_detection_delay_millis;
+                let delay = self
+                    .settings
+                    .read()
+                    .unwrap()
+                    .movemap
+                    .liquid_detection_delay_millis;
 
                 if time.elapsed() > Duration::from_millis(delay)
                     && let Some(mean_liquid_level) = self.get_mean_liquid_level()
@@ -286,7 +281,7 @@ impl Bot {
                     self.noises.push(level);
                 }
 
-                let delay = self.settings.read().unwrap().noises_delay_millis;
+                let delay = self.settings.read().unwrap().movemap.noises_delay_millis;
 
                 if time.elapsed() > Duration::from_millis(delay)
                     && let Some(max_noise_level) = self.get_max_noise_level()
@@ -299,7 +294,7 @@ impl Bot {
 
             BotState::Cast => {
                 self.controller.cast();
-                if self.settings.read().unwrap().use_potions {
+                if self.settings.read().unwrap().bot.use_potions {
                     self.controller.use_potions();
                 }
 
@@ -307,7 +302,7 @@ impl Bot {
             }
 
             BotState::CastingCooldown(time) => {
-                let delay = self.settings.read().unwrap().casting_delay_millis;
+                let delay = self.settings.read().unwrap().bot.casting_delay_millis;
                 if time.elapsed() > Duration::from_millis(delay) {
                     self.set_state(BotState::WaitingForBite);
                 }
@@ -348,7 +343,7 @@ impl Bot {
 
             let detection_method = {
                 let settings = self.settings.read().unwrap();
-                settings.detection_method.clone()
+                settings.bot.detection_method.clone()
             };
 
             match detection_method {

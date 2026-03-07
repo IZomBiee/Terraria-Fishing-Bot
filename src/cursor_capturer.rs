@@ -60,7 +60,7 @@ impl CursorCapturer {
     }
 
     fn manage_sleep(&mut self) {
-        let target_fps = self.settings.read().map(|s| s.fps).unwrap_or(30);
+        let target_fps = self.settings.read().map(|s| s.capture.fps).unwrap_or(30);
         let current_fps = self.get_fps();
 
         if (current_fps as u8) > target_fps {
@@ -109,7 +109,7 @@ impl CursorCapturer {
                 return None;
             };
 
-            settings.fps
+            settings.capture.fps
         };
 
         if (self.get_fps() as u8) > target_fps {
@@ -134,7 +134,7 @@ impl CursorCapturer {
             let Ok(settings) = self.settings.read() else {
                 return None;
             };
-            settings.margin as i32
+            settings.capture.margin as i32
         };
 
         let (mut x0, mut y0, mut x1, mut y1) =
