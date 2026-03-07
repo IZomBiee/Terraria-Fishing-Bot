@@ -2,24 +2,43 @@ use device_query::{DeviceQuery, DeviceState, Keycode};
 use eframe::egui::Vec2;
 use eframe::{egui, egui::panel::*};
 use std::sync::mpsc::Receiver;
-use std::sync::{Arc, Mutex, mpsc::Sender};
+use std::sync::{Arc, RwLock, mpsc::Sender};
 use std::time::{Duration, Instant};
 
-use crate::bot::{self, BotCommand, BotSended, BotState, DetectionMethod};
+use crate::bot::{self, BotCommand, BotState, DetectionMethod};
 use crate::cursor_capturer::SharedFrame;
 use crate::settings::Settings;
 use crate::ui_terminal::UiTerminal;
 
+pub enum UiSended {
+    LiquidGap(u32, u32),
+    DetectedItems(Vec<String>),
+    ChangeState(BotState),
+}
+
+struct App {
+    tx: Sender<BotCommand>,
+    rx: Receiver<UiSended>,
+    log_rx: Receiver<String>,
+    settings: Arc<RwLock<Settings>>,
+    terminal: UiTerminal,
+    texture: Option<egui::TextureHandle>,
+    shared_frame: SharedFrame,
+    last_toggle_key_time: Option<Instant>,
+    last_liquid_gap: Option<(u32, u32)>,
+    last_state: BotState,
+}
+
 pub fn run(
     tx: Sender<bot::BotCommand>,
-    rx: Receiver<BotSended>,
-    settings: Arc<Mutex<Settings>>,
-    terminal: Arc<Mutex<UiTerminal>>,
+    rx: Receiver<UiSended>,
+    log_rx: Receiver<String>,
+    settings: Arc<RwLock<Settings>>,
+    terminal: UiTerminal,
     shared_frame: SharedFrame,
-    shared_state: Arc<Mutex<BotState>>,
 ) -> eframe::Result {
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([760.0, 500.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([900.0, 400.0]),
         ..Default::default()
     };
 
@@ -31,34 +50,23 @@ pub fn run(
             Ok(Box::new(App {
                 tx,
                 rx,
+                log_rx,
                 settings,
                 terminal,
                 texture: None,
                 shared_frame,
-                shared_state,
                 last_toggle_key_time: None,
                 last_liquid_gap: None,
+                last_state: BotState::Idle,
             }))
         }),
     )
-}
-struct App {
-    tx: Sender<BotCommand>,
-    rx: Receiver<BotSended>,
-    settings: Arc<Mutex<Settings>>,
-    terminal: Arc<Mutex<UiTerminal>>,
-    texture: Option<egui::TextureHandle>,
-    shared_frame: SharedFrame,
-    shared_state: Arc<Mutex<BotState>>,
-    last_toggle_key_time: Option<Instant>,
-    last_liquid_gap: Option<(u32, u32)>,
 }
 
 impl App {
     fn update_preview(&mut self, ctx: &egui::Context, new_frame: &mut image::RgbaImage) {
         if let Some((y0, y1)) = self.last_liquid_gap
-            && self.settings.lock().expect("Mutex poison").detection_method
-                == DetectionMethod::MoveMap
+            && self.settings.read().unwrap().detection_method == DetectionMethod::MoveMap
         {
             let (width, height) = new_frame.dimensions();
 
@@ -84,126 +92,90 @@ impl App {
         }
     }
 
-    fn detection_contents(&mut self, ui: &mut egui::Ui, _state: BotState) {
-        let Ok(mut settings) = self.settings.lock() else {
-            return;
-        };
+    fn detection_contents(&mut self, ui: &mut egui::Ui) {
+        let mut settings = self.settings.write().unwrap();
 
-        egui::Grid::new("detection_grid_1")
-            .num_columns(2)
-            .show(ui, |ui| {
-                ui.label("Method");
-                egui::ComboBox::from_id_salt("method_combobox")
-                    .selected_text(format!("{:?}", settings.detection_method))
-                    .show_ui(ui, |ui| {
-                        ui.selectable_value(
-                            &mut settings.detection_method,
-                            DetectionMethod::MoveMap,
-                            "MoveMap",
-                        );
-                        ui.selectable_value(
-                            &mut settings.detection_method,
-                            DetectionMethod::Yolo,
-                            "YOLO",
-                        );
-                        ui.selectable_value(
-                            &mut settings.detection_method,
-                            DetectionMethod::Sonar,
-                            "Sonar",
-                        );
-                    });
-            });
-        ui.end_row();
+        ui.horizontal(|ui| {
+            ui.label("Method");
+            egui::ComboBox::from_id_salt("method_combobox")
+                .selected_text(format!("{:?}", settings.detection_method))
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(
+                        &mut settings.detection_method,
+                        DetectionMethod::MoveMap,
+                        "MoveMap",
+                    );
+                    ui.selectable_value(
+                        &mut settings.detection_method,
+                        DetectionMethod::Yolo,
+                        "YOLO",
+                    );
+                    ui.selectable_value(
+                        &mut settings.detection_method,
+                        DetectionMethod::Sonar,
+                        "Sonar",
+                    );
+                });
+        });
+
         match settings.detection_method {
             DetectionMethod::MoveMap => {
-                egui::Grid::new("detection_grid_2")
-                    .num_columns(2)
-                    .show(ui, |ui| {
-                        ui.label("Liquid Offset");
-                        ui.add(egui::Slider::new(&mut settings.liquid_offset, -20..=20));
-                        ui.end_row();
-                        ui.label("Liquid Detection Delay");
-                        ui.add(egui::Slider::new(
-                            &mut settings.liquid_detection_delay_millis,
-                            500..=5000,
-                        ));
-                        ui.end_row();
-                        ui.label("Noise Detection Delay");
-                        ui.add(egui::Slider::new(
-                            &mut settings.noises_delay_millis,
-                            500..=5000,
-                        ));
-                        ui.end_row();
+                ui.add(
+                    egui::Slider::new(&mut settings.liquid_offset, -20..=20).text("Liquid Offset"),
+                );
 
-                        ui.label("Detection Threshold");
-                        ui.add(egui::Slider::new(
-                            &mut settings.detection_threshold,
-                            50..=500,
-                        ));
-                        ui.end_row();
+                ui.add(
+                    egui::Slider::new(&mut settings.liquid_detection_delay_millis, 500..=5000)
+                        .text("Liquid Detection Delay"),
+                );
 
-                        ui.label("Detection Gap Size");
-                        ui.add(egui::Slider::new(
-                            &mut settings.detection_gap_size,
-                            10..=100,
-                        ));
-                    });
+                ui.add(
+                    egui::Slider::new(&mut settings.noises_delay_millis, 500..=5000)
+                        .text("Noise Detection Delay"),
+                );
+
+                ui.add(
+                    egui::Slider::new(&mut settings.detection_threshold, 50..=500)
+                        .text("Detection Threshold"),
+                );
+
+                ui.add(
+                    egui::Slider::new(&mut settings.detection_gap_size, 10..=100)
+                        .text("Detection Gap Size"),
+                );
             }
             DetectionMethod::Sonar => {
                 ui.label("Detection Words");
                 egui::TextEdit::multiline(&mut settings.sonar_detection_words)
-                            .hint_text("Write all items you want to catch and separate by comma(,). Like create, bomb.")
-                            .show(ui);
-                egui::Grid::new("detection_grid_2")
-                    .num_columns(2)
-                    .show(ui, |ui| {
-                        ui.label("Threshold");
-                        ui.add(egui::Slider::new(
-                            &mut settings.sonar_detection_threshold,
-                            0..=10,
-                        ));
-                        ui.end_row();
-                    });
+                .hint_text("Write all items you want to catch and separate by comma(,). Like create, bomb.")
+                .show(ui);
+
+                ui.add(
+                    egui::Slider::new(&mut settings.sonar_detection_threshold, 0..=10)
+                        .text("Threshold"),
+                );
             }
             _ => {}
         };
     }
 
-    fn general_contents(&mut self, ui: &mut egui::Ui, _state: BotState) {
-        let Ok(mut settings) = self.settings.lock() else {
-            return;
-        };
-
-        egui::Grid::new("general_grid")
-            .num_columns(2)
-            .show(ui, |ui| {
-                ui.label("Detection Area");
-                ui.add(egui::Slider::new(&mut settings.margin, 10..=300));
-                ui.end_row();
-                ui.label("Framerate");
-                ui.add(egui::Slider::new(&mut settings.fps, 5..=60));
-                ui.end_row();
-                ui.label("Casting Delay");
-                ui.add(egui::Slider::new(
-                    &mut settings.casting_delay_millis,
-                    300..=1500,
-                ));
-                ui.end_row();
-                ui.label("Use Potions");
-                ui.checkbox(&mut settings.use_potions, "");
-            });
+    fn general_contents(&mut self, ui: &mut egui::Ui) {
+        let mut settings = self.settings.write().unwrap();
+        ui.add(egui::Slider::new(&mut settings.margin, 10..=300).text("Detection Area"));
+        ui.add(egui::Slider::new(&mut settings.fps, 5..=60).text("Framerate"));
+        ui.add(
+            egui::Slider::new(&mut settings.casting_delay_millis, 300..=1500).text("Casting Delay"),
+        );
+        ui.horizontal(|ui| {
+            ui.label("Use Potions");
+            ui.checkbox(&mut settings.use_potions, "");
+        });
     }
 
-    fn information_contents(&mut self, ui: &mut egui::Ui, state: BotState) {
-        egui::Grid::new("information_grid")
-            .num_columns(2)
-            .show(ui, |ui| {
-                ui.label("State:");
-                ui.label(format!("{:?}", state));
-                ui.end_row();
-            });
+    fn information_contents(&mut self, ui: &mut egui::Ui) {
+        ui.label(format!("State: {:?}", self.last_state));
 
-        match state {
+        match self.last_state {
             BotState::Idle => {
                 if ui.button("Enable bot").on_hover_text("Hotkey: P").clicked() {
                     let _ = self.tx.send(BotCommand::Start);
@@ -219,30 +191,26 @@ impl App {
                 }
             }
         }
-
-        let terminal = self.terminal.lock().expect("Mutex poison");
-
-        terminal.show(ui);
     }
 }
 
 impl eframe::App for App {
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
-        let mut terminal = self.terminal.lock().expect("Mutex poison");
-        terminal.print("Saving data before exit...");
-        if let Ok(settings) = self.settings.lock() {
-            settings.save_to_file("settings.json", &mut terminal);
-        };
+        self.terminal.print("Saving data before exit...");
+        self.settings.read().unwrap().save_to_file("settings.json");
     }
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        let state = *self.shared_state.lock().expect("Mutex poison");
-
         if let Ok(recived) = self.rx.try_recv() {
             match recived {
-                BotSended::LiquidGap(y0, y1) => self.last_liquid_gap = Some((y0, y1)),
-                BotSended::DetectedItems(_items) => (),
+                UiSended::LiquidGap(y0, y1) => self.last_liquid_gap = Some((y0, y1)),
+                UiSended::DetectedItems(_items) => (),
+                UiSended::ChangeState(state) => self.last_state = state,
             }
+        }
+
+        while let Ok(recived) = self.log_rx.try_recv() {
+            self.terminal.print(&recived);
         }
 
         let device_state = DeviceState::new();
@@ -251,7 +219,7 @@ impl eframe::App for App {
             if self.last_toggle_key_time.is_none()
                 || self.last_toggle_key_time.unwrap().elapsed() > Duration::from_millis(100)
             {
-                match state {
+                match self.last_state {
                     BotState::Idle => {
                         let _ = self.tx.send(BotCommand::Start);
                     }
@@ -284,7 +252,7 @@ impl eframe::App for App {
                     );
                 });
 
-                self.general_contents(ui, state);
+                self.general_contents(ui);
 
                 ui.vertical_centered(|ui| {
                     ui.label(
@@ -294,7 +262,7 @@ impl eframe::App for App {
                     );
                 });
 
-                self.detection_contents(ui, state);
+                self.detection_contents(ui);
 
                 ui.vertical_centered(|ui| {
                     ui.label(
@@ -304,13 +272,18 @@ impl eframe::App for App {
                     );
                 });
 
-                self.information_contents(ui, state);
+                self.information_contents(ui);
             });
+
+        SidePanel::right("right_panel").show(ctx, |ui| {
+            self.terminal.show(ui);
+        });
 
         CentralPanel::default().show(ctx, |ui| {
             if let Some(texture) = &self.texture {
                 ui.add(
-                    egui::Image::from_texture(texture).fit_to_exact_size(Vec2::new(385.0, 385.0)),
+                    egui::Image::from_texture(texture)
+                        .fit_to_exact_size(Vec2::new(ui.available_width(), ui.available_height())),
                 );
             } else {
                 ui.label("Waiting for screen capture...");

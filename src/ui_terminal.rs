@@ -1,12 +1,10 @@
 use eframe::egui::Ui;
 use eframe::egui::{self, Color32};
 use std::collections::VecDeque;
-use std::time::Instant;
 
 pub struct UiTerminal {
     history: VecDeque<String>,
     size: usize,
-    start_time: Instant,
 }
 
 impl UiTerminal {
@@ -14,7 +12,6 @@ impl UiTerminal {
         Self {
             history: VecDeque::with_capacity(size),
             size,
-            start_time: Instant::now(),
         }
     }
 
@@ -22,7 +19,7 @@ impl UiTerminal {
         if self.history.len() >= self.size {
             self.history.pop_front();
         }
-        let text = format!("{} - {}", self.start_time.elapsed().as_secs_f32(), text);
+        let text = text.to_string();
 
         #[cfg(debug_assertions)]
         println!("{}", text);

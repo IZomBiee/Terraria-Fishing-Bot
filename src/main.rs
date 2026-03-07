@@ -1,25 +1,35 @@
-// #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 pub mod bot;
 pub mod controller;
 pub mod cursor_capturer;
+pub mod logger;
 pub mod opencv;
 pub mod settings;
 pub mod sonar_detector;
 pub mod ui;
 pub mod ui_terminal;
 
+use logger::Logger;
 use std::sync::mpsc;
-use std::sync::{Arc, Mutex};
-
-use crate::bot::{BotSended, BotState};
+use std::sync::{Arc, Mutex, RwLock};
+use std::time::Instant;
 
 fn main() {
-    let terminal = Arc::new(Mutex::new(ui_terminal::UiTerminal::new(100)));
+    let (log_tx, log_rx) = mpsc::channel();
 
-    let settings = Arc::new(Mutex::new(settings::Settings::load_from_file(
+    let logger = Box::new(Logger {
+        tx: Mutex::new(log_tx),
+        start_time: Instant::now(),
+    });
+
+    log::set_logger(Box::leak(logger)).unwrap();
+    log::set_max_level(log::LevelFilter::Info);
+
+    let terminal = ui_terminal::UiTerminal::new(100);
+
+    let settings = Arc::new(RwLock::new(settings::Settings::load_from_file(
         "settings.json",
-        &mut terminal.lock().expect("Mutex poison"),
     )));
     let shared_frame = Arc::new(Mutex::new(None));
 
@@ -31,24 +41,17 @@ fn main() {
         capturer.run();
     });
 
-    let controller = controller::Controller::new(Arc::clone(&settings));
-
     let sonar_detector = sonar_detector::SonarDetector::default();
 
     let (gui_tx, bot_rx) = mpsc::channel::<bot::BotCommand>();
-    let (bot_tx, gui_rx) = mpsc::channel::<BotSended>();
-
-    let shared_state = Arc::new(Mutex::new(BotState::Idle));
+    let (bot_tx, gui_rx) = mpsc::channel::<ui::UiSended>();
 
     let bot_frame = shared_frame.clone();
     let mut bot = bot::Bot::new(
         bot_rx,
         bot_tx,
-        Arc::clone(&terminal),
-        Arc::clone(&shared_state),
         bot_frame,
         Arc::clone(&settings),
-        controller,
         sonar_detector,
     );
     std::thread::spawn(move || bot.run());
@@ -56,9 +59,9 @@ fn main() {
     let _ = ui::run(
         gui_tx,
         gui_rx,
+        log_rx,
         Arc::clone(&settings),
-        Arc::clone(&terminal),
+        terminal,
         Arc::clone(&shared_frame),
-        Arc::clone(&shared_state),
     );
 }

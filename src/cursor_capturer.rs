@@ -2,14 +2,14 @@ use crate::settings::Settings;
 use image::RgbaImage;
 use mouse_position::mouse_position::Mouse;
 use std::collections::VecDeque;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 use xcap::Monitor;
 
 pub type SharedFrame = Arc<Mutex<Option<RgbaImage>>>;
 
 pub struct CursorCapturer {
-    settings: Arc<Mutex<Settings>>,
+    settings: Arc<RwLock<Settings>>,
     shared_frame: SharedFrame,
     width: u32,
     height: u32,
@@ -19,7 +19,7 @@ pub struct CursorCapturer {
 }
 
 impl CursorCapturer {
-    pub fn new(settings: Arc<Mutex<Settings>>, shared_frame: SharedFrame) -> Self {
+    pub fn new(settings: Arc<RwLock<Settings>>, shared_frame: SharedFrame) -> Self {
         let monitor = Monitor::all()
             .unwrap()
             .first()
@@ -60,7 +60,7 @@ impl CursorCapturer {
     }
 
     fn manage_sleep(&mut self) {
-        let target_fps = self.settings.lock().map(|s| s.fps).unwrap_or(30);
+        let target_fps = self.settings.read().map(|s| s.fps).unwrap_or(30);
         let current_fps = self.get_fps();
 
         if (current_fps as u8) > target_fps {
@@ -105,7 +105,7 @@ impl CursorCapturer {
             .unwrap();
 
         let target_fps = {
-            let Ok(settings) = self.settings.lock() else {
+            let Ok(settings) = self.settings.read() else {
                 return None;
             };
 
@@ -131,7 +131,7 @@ impl CursorCapturer {
         };
 
         let margin = {
-            let Ok(settings) = self.settings.lock() else {
+            let Ok(settings) = self.settings.read() else {
                 return None;
             };
             settings.margin as i32

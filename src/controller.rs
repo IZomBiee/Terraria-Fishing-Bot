@@ -1,17 +1,17 @@
 use crate::settings::Settings;
 use enigo::{Enigo, Key, Keyboard};
 use mouse_rs::{Mouse, types::keys::Keys};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
 
 pub struct Controller {
     pub mouse: Mouse,
-    pub settings: Arc<Mutex<Settings>>,
+    pub settings: Arc<RwLock<Settings>>,
 }
 
 impl Controller {
-    pub fn new(settings: Arc<Mutex<Settings>>) -> Controller {
+    pub fn new(settings: Arc<RwLock<Settings>>) -> Controller {
         Controller {
             mouse: Mouse::new(),
             settings,

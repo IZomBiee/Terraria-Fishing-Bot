@@ -1,18 +1,21 @@
-use crate::cursor_capturer::SharedFrame;
-use crate::ui_terminal::UiTerminal;
-use crate::{controller::Controller, opencv, settings::Settings, sonar_detector::SonarDetector};
-use image::{GrayImage, RgbaImage};
-use serde::{Deserialize, Serialize};
+use crate::{
+    controller::Controller, cursor_capturer::SharedFrame, opencv, settings::Settings,
+    sonar_detector::SonarDetector, ui::UiSended,
+};
 
-use std::thread::sleep;
+use image::{GrayImage, RgbaImage};
+use log::info;
+use serde::{Deserialize, Serialize};
+use strum_macros::AsRefStr;
+
 use std::{
     sync::{
-        Arc, Mutex,
+        Arc, RwLock,
         mpsc::{Receiver, Sender},
     },
+    thread::sleep,
     time::{Duration, Instant},
 };
-use strum_macros::AsRefStr;
 
 #[derive(Debug, PartialEq, AsRefStr, Clone, Copy)]
 pub enum BotState {
@@ -31,11 +34,6 @@ pub enum BotCommand {
     Stop,
 }
 
-pub enum BotSended {
-    LiquidGap(u32, u32),
-    DetectedItems(Vec<String>),
-}
-
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub enum DetectionMethod {
     MoveMap,
@@ -44,14 +42,13 @@ pub enum DetectionMethod {
 }
 
 pub struct Bot {
+    sonar_detector: SonarDetector,
+    shared_frame: SharedFrame,
+    state: BotState,
+    settings: Arc<RwLock<Settings>>,
     rx: Receiver<BotCommand>,
-    tx: Sender<BotSended>,
-    pub terminal: Arc<Mutex<UiTerminal>>,
-    pub shared_frame: SharedFrame,
-    pub state: Arc<Mutex<BotState>>,
-    pub settings: Arc<Mutex<Settings>>,
-    pub controller: Controller,
-    pub sonar_detector: SonarDetector,
+    tx: Sender<UiSended>,
+    controller: Controller,
     liquid_levels: Vec<u32>,
     noises: Vec<u32>,
     last_frame: Option<RgbaImage>,
@@ -61,22 +58,18 @@ pub struct Bot {
 impl Bot {
     pub fn new(
         rx: Receiver<BotCommand>,
-        tx: Sender<BotSended>,
-        terminal: Arc<Mutex<UiTerminal>>,
-        shared_state: Arc<Mutex<BotState>>,
+        tx: Sender<UiSended>,
         shared_frame: SharedFrame,
-        settings: Arc<Mutex<Settings>>,
-        controller: Controller,
+        settings: Arc<RwLock<Settings>>,
         sonar_detector: SonarDetector,
     ) -> Bot {
         Bot {
             rx,
             tx,
-            terminal,
             shared_frame,
-            state: shared_state,
-            settings,
-            controller,
+            state: BotState::Idle,
+            settings: Arc::clone(&settings),
+            controller: Controller::new(settings),
             sonar_detector,
             liquid_levels: Vec::new(),
             noises: Vec::new(),
@@ -87,6 +80,8 @@ impl Bot {
 
     pub fn run(&mut self) {
         loop {
+            self.handle_commands();
+
             let maybe_img = self
                 .shared_frame
                 .lock()
@@ -104,18 +99,14 @@ impl Bot {
                 }
             }
 
-            sleep(Duration::from_millis(6));
+            sleep(Duration::from_millis(1000 / 60));
         }
     }
 
     fn set_state(&mut self, new_state: BotState) {
-        self.terminal
-            .lock()
-            .expect("Mutex poison")
-            .print(&format!("Bot state: {}", new_state.as_ref()));
-
-        let mut state = self.state.lock().expect("Mutex poison, can't write state!");
-        *state = new_state;
+        self.state = new_state;
+        let _ = self.tx.send(UiSended::ChangeState(self.state));
+        info!("Bot state: {:?}", self.state);
     }
 
     fn get_liquid_level(mask: &GrayImage) -> Option<u32> {
@@ -152,9 +143,7 @@ impl Bot {
     }
 
     fn get_detection_gap(&self) -> Option<(u32, u32)> {
-        let Ok(settings) = self.settings.lock() else {
-            return None;
-        };
+        let settings = self.settings.read().unwrap();
 
         if let Some(liquid_level) = self.get_mean_liquid_level() {
             let liquid_level = liquid_level as i32 + settings.liquid_offset;
@@ -196,7 +185,8 @@ impl Bot {
             cast_max_time,
             use_potions,
         ) = {
-            let settings = self.settings.lock().expect("Mutex poison");
+            let settings = self.settings.read().unwrap();
+
             (
                 settings.detection_method.clone(),
                 settings.detection_threshold,
@@ -212,10 +202,6 @@ impl Bot {
                 let abs_difference = self.get_abs_difference(difference_mask);
 
                 let Some(abs_difference) = abs_difference else {
-                    self.terminal
-                        .lock()
-                        .expect("Mutex poison")
-                        .print("No liquid level!");
                     self.controller.catch();
                     self.set_state(BotState::CheckingLiquidLevel(Instant::now()));
                     return;
@@ -226,10 +212,6 @@ impl Bot {
                         self.set_state(BotState::Catch);
                     }
                 } else {
-                    self.terminal
-                        .lock()
-                        .expect("Mutex poison")
-                        .print("No noise level!");
                     self.controller.catch();
                     self.set_state(BotState::CheckingNoise(Instant::now()));
                 }
@@ -242,7 +224,7 @@ impl Bot {
                 if sonar_detector_words.split(",").any(|string| {
                     SonarDetector::is_needed_string(string, words.clone(), sonar_detector_threshold)
                 }) {
-                    let _ = self.tx.send(BotSended::DetectedItems(words));
+                    let _ = self.tx.send(UiSended::DetectedItems(words));
                     self.set_state(BotState::Catch);
                 }
 
@@ -279,38 +261,23 @@ impl Bot {
             return;
         };
 
-        self.handle_commands();
-
-        let current_state = *self.state.lock().expect("Mutex poison, can't read state!");
-
-        match current_state {
+        match self.state {
             BotState::CheckingLiquidLevel(time) => {
                 if let Some(level) = Bot::get_liquid_level(&difference_mask) {
                     self.liquid_levels.push(level);
                     self.liquid_levels.sort();
                 }
 
-                let delay = self
-                    .settings
-                    .lock()
-                    .expect("Mutex poison")
-                    .liquid_detection_delay_millis;
-                if time.elapsed() > Duration::from_millis(delay) {
-                    if let Some(mean_liquid_level) = self.get_mean_liquid_level() {
-                        self.terminal
-                            .lock()
-                            .expect("Mutex poison")
-                            .print(&format!("The liquid level is {}.", mean_liquid_level));
-                        if let Some(gap) = self.get_detection_gap() {
-                            let _ = self.tx.send(BotSended::LiquidGap(gap.0, gap.1));
-                        }
-                        self.set_state(BotState::CheckingNoise(Instant::now()));
-                    } else {
-                        self.terminal
-                            .lock()
-                            .expect("Mutex poison")
-                            .print("Can't find liquid level.");
+                let delay = self.settings.read().unwrap().liquid_detection_delay_millis;
+
+                if time.elapsed() > Duration::from_millis(delay)
+                    && let Some(mean_liquid_level) = self.get_mean_liquid_level()
+                {
+                    info!("The liquid level is: {}", mean_liquid_level);
+                    if let Some(gap) = self.get_detection_gap() {
+                        let _ = self.tx.send(UiSended::LiquidGap(gap.0, gap.1));
                     }
+                    self.set_state(BotState::CheckingNoise(Instant::now()));
                 }
             }
 
@@ -319,30 +286,20 @@ impl Bot {
                     self.noises.push(level);
                 }
 
-                let delay = self
-                    .settings
-                    .lock()
-                    .expect("Mutex poison")
-                    .noises_delay_millis;
-                if time.elapsed() > Duration::from_millis(delay) {
-                    if let Some(max_noise_level) = self.get_max_noise_level() {
-                        self.terminal
-                            .lock()
-                            .expect("Mutex poison")
-                            .print(&format!("The noise level is {}.", max_noise_level));
-                        self.set_state(BotState::Cast);
-                    } else {
-                        self.terminal
-                            .lock()
-                            .expect("Mutex poison")
-                            .print("Can't find noise level.");
-                    }
+                let delay = self.settings.read().unwrap().noises_delay_millis;
+
+                if time.elapsed() > Duration::from_millis(delay)
+                    && let Some(max_noise_level) = self.get_max_noise_level()
+                {
+                    info!("The noise level is: {}", max_noise_level);
+
+                    self.set_state(BotState::Cast);
                 }
             }
 
             BotState::Cast => {
                 self.controller.cast();
-                if self.settings.lock().expect("Mutex poison").use_potions {
+                if self.settings.read().unwrap().use_potions {
                     self.controller.use_potions();
                 }
 
@@ -350,11 +307,7 @@ impl Bot {
             }
 
             BotState::CastingCooldown(time) => {
-                let delay = self
-                    .settings
-                    .lock()
-                    .expect("Mutex poison")
-                    .casting_delay_millis;
+                let delay = self.settings.read().unwrap().casting_delay_millis;
                 if time.elapsed() > Duration::from_millis(delay) {
                     self.set_state(BotState::WaitingForBite);
                 }
@@ -390,15 +343,11 @@ impl Bot {
     }
 
     pub fn start(&mut self) -> bool {
-        let state = *self.state.lock().expect("Mutex poison");
-        if state == BotState::Idle {
-            self.terminal
-                .lock()
-                .expect("Mutex poison")
-                .print("Starting bot!");
+        if self.state == BotState::Idle {
+            info!("Starting bot");
 
             let detection_method = {
-                let settings = self.settings.lock().expect("Mutex poison");
+                let settings = self.settings.read().unwrap();
                 settings.detection_method.clone()
             };
 
@@ -420,12 +369,8 @@ impl Bot {
     }
 
     pub fn stop(&mut self) {
-        let state = *self.state.lock().expect("Mutex poison");
-        if state != BotState::Idle {
-            self.terminal
-                .lock()
-                .expect("Mutex poison")
-                .print("Stoping bot!");
+        if self.state != BotState::Idle {
+            info!("Stoping bot");
             self.liquid_levels.clear();
             self.noises.clear();
             self.last_cast_time = None;
