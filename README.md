@@ -25,11 +25,12 @@ Terraria advanced fishing bot, written entirely in Rust. Created for practicing/
 
 ## Manual
 
-1. Install Terraria-Fishing-Bot.exe and run it.
-2. Prepare position for fish where no moving entities are.
-3. Setup cursor just slightly below where you want to fish.
-4. Press Q to start/stop and don't move both cursor and your character.
-5. Press P to exit.
+1. Install zip file from releases tab in this repository.
+2. Unzip it in any directory, like desktop.
+3. Run .exe.
+4. Setup settings in gui.
+5. Setup cursor just slightly below where you want to fish.
+6. Press P to start/stop and don't move both cursor and your character.
 
 # Things to Know
 
