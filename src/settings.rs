@@ -24,7 +24,7 @@ impl Default for CaptureSettings {
 pub struct BotSettings {
     pub casting_delay_millis: u64,
     pub use_potions: bool,
-    pub cast_max_time: Duration,
+    pub potion_use_delay: Duration,
     pub detection_method: bot::DetectionMethod,
 }
 
@@ -33,7 +33,7 @@ impl Default for BotSettings {
         Self {
             casting_delay_millis: 1000,
             use_potions: false,
-            cast_max_time: Duration::from_secs(20),
+            potion_use_delay: Duration::from_secs(20),
             detection_method: bot::DetectionMethod::MoveMap,
         }
     }

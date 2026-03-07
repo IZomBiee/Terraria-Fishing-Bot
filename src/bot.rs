@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use strum_macros::AsRefStr;
 
 use std::{
+    fmt::Display,
     sync::{
         Arc, RwLock,
         mpsc::{Receiver, Sender},
@@ -27,6 +28,22 @@ pub enum BotState {
     CastingCooldown(Instant),
     CheckingLiquidLevel(Instant),
     CheckingNoise(Instant),
+}
+
+impl Display for BotState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let name = match self {
+            BotState::Idle => "Idle",
+            BotState::WaitingForBite => "WaitingForBite",
+            BotState::CheckingBite => "CheckingBite",
+            BotState::Cast => "Cast",
+            BotState::Catch => "Catch",
+            BotState::CastingCooldown(..) => "CastingCooldown",
+            BotState::CheckingLiquidLevel(..) => "CheckingLiquidLevel",
+            BotState::CheckingNoise(..) => "CheckingNoise",
+        };
+        write!(f, "{}", name)
+    }
 }
 
 pub enum BotCommand {
@@ -52,7 +69,6 @@ pub struct Bot {
     liquid_levels: Vec<u32>,
     noises: Vec<u32>,
     last_frame: Option<RgbaImage>,
-    last_cast_time: Option<Instant>,
 }
 
 impl Bot {
@@ -74,7 +90,6 @@ impl Bot {
             liquid_levels: Vec::new(),
             noises: Vec::new(),
             last_frame: None,
-            last_cast_time: None,
         }
     }
 
@@ -106,7 +121,7 @@ impl Bot {
     fn set_state(&mut self, new_state: BotState) {
         self.state = new_state;
         let _ = self.tx.send(UiSended::ChangeState(self.state));
-        info!("Bot state: {:?}", self.state);
+        info!("Bot state: {}", self.state);
     }
 
     fn get_liquid_level(mask: &GrayImage) -> Option<u32> {
@@ -177,8 +192,28 @@ impl Bot {
     }
 
     fn waiting_for_bite_logic(&mut self, last_frame: &RgbaImage, difference_mask: &GrayImage) {
-        let settings = self.settings.read().unwrap().clone();
-        match settings.bot.detection_method {
+        let (
+            use_potions,
+            detection_method,
+            detection_threshold,
+            sonar_detection_words,
+            sonar_detection_threshold,
+        ) = {
+            let settings = self.settings.read().unwrap();
+            (
+                settings.bot.use_potions,
+                settings.bot.detection_method.clone(),
+                settings.movemap.detection_threshold,
+                settings.sonar.sonar_detection_words.clone(),
+                settings.sonar.sonar_detection_threshold,
+            )
+        };
+
+        if use_potions {
+            self.controller.use_potions_if_necessery();
+        }
+
+        match detection_method {
             DetectionMethod::MoveMap => {
                 let abs_difference = self.get_abs_difference(difference_mask);
 
@@ -189,7 +224,7 @@ impl Bot {
                 };
 
                 if let Some(noise) = self.get_max_noise_level() {
-                    if abs_difference > noise + settings.movemap.detection_threshold {
+                    if abs_difference > noise + detection_threshold {
                         self.set_state(BotState::Catch);
                     }
                 } else {
@@ -202,28 +237,15 @@ impl Bot {
                     .sonar_detector
                     .get_strings_from_frame(opencv::rgba_2_rgb(last_frame));
 
-                if settings
-                    .sonar
-                    .sonar_detection_words
-                    .split(",")
-                    .any(|string| {
-                        SonarDetector::is_needed_string(
-                            string,
-                            words.clone(),
-                            settings.sonar.sonar_detection_threshold,
-                        )
-                    })
-                {
+                if sonar_detection_words.split(",").any(|string| {
+                    SonarDetector::is_needed_string(
+                        string,
+                        words.clone(),
+                        sonar_detection_threshold,
+                    )
+                }) {
                     let _ = self.tx.send(UiSended::DetectedItems(words));
                     self.set_state(BotState::Catch);
-                }
-
-                if let Some(time) = self.last_cast_time
-                    && time.elapsed() > settings.bot.cast_max_time
-                    && settings.bot.use_potions
-                {
-                    self.controller.use_potions();
-                    self.last_cast_time = Some(Instant::now());
                 }
             }
             _ => {
@@ -368,7 +390,6 @@ impl Bot {
             info!("Stoping bot");
             self.liquid_levels.clear();
             self.noises.clear();
-            self.last_cast_time = None;
             self.set_state(BotState::Idle);
         }
     }
