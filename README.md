@@ -5,6 +5,7 @@ Terraria advanced fishing bot, written entirely in Rust. Created for practicing/
 ## Features
 
 - [x] Reliable fishing in water/lava/honey
+- [ ] Reliable fishing with noise like enemies
 - [x] Gui
 - [x] Automatic potion use
 - [ ] Fast unload to nearbay chests
@@ -14,7 +15,8 @@ Terraria advanced fishing bot, written entirely in Rust. Created for practicing/
 
 ## Preview
 
-![Bot in action](assets/preview.gif)
+![Movemap method preview](assets/movemap_preview.gif)
+![Sonar method preview](assets/sonar_preview.gif)
 
 ## Manual
 

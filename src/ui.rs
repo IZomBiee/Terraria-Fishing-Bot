@@ -173,7 +173,7 @@ impl App {
     }
 
     fn information_contents(&mut self, ui: &mut egui::Ui) {
-        ui.label(format!("State: {:?}", self.last_state));
+        ui.label(format!("State: {}", self.last_state));
 
         match self.last_state {
             BotState::Idle => {
