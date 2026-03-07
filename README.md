@@ -15,7 +15,12 @@ Terraria advanced fishing bot, written entirely in Rust. Created for practicing/
 
 ## Preview
 
+### Movemap method
+
 ![Movemap method preview](assets/movemap_preview.gif)
+
+### Sonar method
+
 ![Sonar method preview](assets/sonar_preview.gif)
 
 ## Manual
@@ -28,7 +33,7 @@ Terraria advanced fishing bot, written entirely in Rust. Created for practicing/
 
 # Things to Know
 
-- The bot `WILL NOT WORK` if you do not have waves enabled.
+- The bot `WILL NOT WORK` in movemap mode if you do not have waves enabled.
 - Bot tracking area around cursor.
 - The bot may not work properly in hell due to distortion. It is better to set a contrasting background.
 - During heavy rain, false alarms sometimes occur. It is better to put up a roof.
