@@ -10,6 +10,7 @@ pub mod sonar_detector;
 pub mod ui;
 pub mod ui_terminal;
 
+use image::RgbaImage;
 use logger::Logger;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex, RwLock};
@@ -32,6 +33,10 @@ fn main() {
         "settings.json",
     )));
     let shared_frame = Arc::new(Mutex::new(None));
+    let force_draw_frame: Arc<Mutex<Option<RgbaImage>>> = Arc::new(Mutex::new(None));
+
+    let force_draw_bot_frame = Arc::clone(&force_draw_frame);
+    let force_draw_ui_frame = Arc::clone(&force_draw_frame);
 
     let settings_for_thread = Arc::clone(&settings);
     let frame_for_thread = Arc::clone(&shared_frame);
@@ -51,6 +56,7 @@ fn main() {
         bot_rx,
         bot_tx,
         bot_frame,
+        force_draw_bot_frame,
         Arc::clone(&settings),
         sonar_detector,
     );
@@ -66,5 +72,6 @@ fn main() {
         Arc::clone(&settings),
         terminal,
         Arc::clone(&shared_frame),
+        force_draw_ui_frame
     );
 }

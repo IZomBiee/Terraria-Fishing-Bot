@@ -58,6 +58,7 @@ pub enum DetectionMethod {
 pub struct Bot {
     sonar_detector: SonarDetector,
     shared_frame: SharedFrame,
+    force_draw_frame: SharedFrame,
     state: BotState,
     settings: Arc<RwLock<Settings>>,
     rx: Receiver<BotCommand>,
@@ -76,6 +77,7 @@ impl Bot {
         rx: Receiver<BotCommand>,
         tx: Sender<UiSended>,
         shared_frame: SharedFrame,
+        force_draw_frame: SharedFrame,
         settings: Arc<RwLock<Settings>>,
         sonar_detector: SonarDetector,
     ) -> Bot {
@@ -83,6 +85,7 @@ impl Bot {
             rx,
             tx,
             shared_frame,
+            force_draw_frame,
             state: BotState::Idle,
             settings: Arc::clone(&settings),
             controller: Controller::new(Arc::clone(&settings)),
@@ -251,6 +254,7 @@ impl Bot {
                 let abs_difference = self.get_abs_difference(difference_mask);
 
                 let Some(abs_difference) = abs_difference else {
+                    info!("Could not read movement! Recast.");
                     self.controller.catch();
                     self.set_state(BotState::CheckingLiquidLevel(Instant::now()));
                     return;
@@ -258,9 +262,11 @@ impl Bot {
 
                 if let Some(noise) = self.get_max_noise_level() {
                     if abs_difference > noise + detection_threshold {
+                        info!("Movement detected ({}/{}).", abs_difference, noise + detection_threshold);
                         self.set_state(BotState::Catch);
                     }
                 } else {
+                    info!("Could not noise level! Recast.");
                     self.controller.catch();
                     self.set_state(BotState::CheckingNoise(Instant::now()));
                 }
@@ -305,6 +311,19 @@ impl Bot {
             self.last_frame = Some(frame.clone());
             return;
         };
+
+        if self.settings.read().unwrap().movemap.draw_mask {
+            let rgba_frame: image::RgbaImage = 
+                image::DynamicImage::ImageLuma8(difference_mask.clone()).to_rgba8();
+            
+            if let Ok(mut lock) = self.force_draw_frame.lock() {
+                *lock = Some(rgba_frame);
+            }
+        } else {
+            if let Ok(mut lock) = self.force_draw_frame.lock() {
+                *lock = None;
+            }
+        }
 
         match self.state {
             BotState::CheckingLiquidLevel(time) => {

@@ -15,7 +15,7 @@ pub enum UiSended {
     LiquidGap(u32, u32),
     DetectedItems(Vec<String>),
     ChangeState(BotState),
-    SetFPS(f32),
+    SetFPS(f32)
 }
 
 struct App {
@@ -26,6 +26,7 @@ struct App {
     terminal: UiTerminal,
     texture: Option<egui::TextureHandle>,
     shared_frame: SharedFrame,
+    force_draw_frame: SharedFrame,
     last_toggle_key_time: Option<Instant>,
     last_liquid_gap: Option<(u32, u32)>,
     last_state: BotState,
@@ -42,6 +43,7 @@ pub fn run(
     settings: Arc<RwLock<Settings>>,
     terminal: UiTerminal,
     shared_frame: SharedFrame,
+    force_draw_frame: SharedFrame,
 ) -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([900.0, 400.0]),
@@ -63,6 +65,7 @@ pub fn run(
                 terminal,
                 texture: None,
                 shared_frame,
+                force_draw_frame,
                 last_toggle_key_time: None,
                 last_liquid_gap: None,
                 last_state: BotState::Idle,
@@ -143,6 +146,11 @@ impl App {
                     egui::Slider::new(&mut settings.detection_gap_size, 10..=100)
                         .text("Detection Gap Size"),
                 );
+
+                ui.horizontal(|ui| {
+                    ui.label("Draw Mask");
+                    ui.checkbox(&mut self.local_settings.movemap.draw_mask, "")
+                });
             }
             DetectionMethod::Sonar => {
                 let settings = &mut self.local_settings.sonar;
@@ -273,7 +281,7 @@ impl eframe::App for App {
                 UiSended::ChangeState(state) => self.last_state = state,
                 UiSended::SetFPS(fps) => {
                     self.fps = fps as u64
-                },
+                }
             }
         }
 
@@ -303,13 +311,22 @@ impl eframe::App for App {
         }
 
         let maybe_img = self
-            .shared_frame
+            .force_draw_frame
             .lock()
             .ok()
             .and_then(|guard| guard.clone());
 
         if let Some(mut rgba_img) = maybe_img {
             self.update_preview(ctx, &mut rgba_img);
+        } else {
+            let maybe_img = self
+                .shared_frame
+                .lock()
+                .ok()
+                .and_then(|guard| guard.clone());
+            if let Some(mut rgba_img) = maybe_img {
+                self.update_preview(ctx, &mut rgba_img);
+            }
         }
 
         SidePanel::left("left_panel")

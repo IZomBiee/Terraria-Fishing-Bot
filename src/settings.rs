@@ -46,6 +46,7 @@ pub struct MovemapSettings {
     pub noises_delay_millis: u64,
     pub detection_threshold: u32,
     pub detection_gap_size: u32,
+    pub draw_mask: bool,
 }
 
 impl Default for MovemapSettings {
@@ -56,6 +57,7 @@ impl Default for MovemapSettings {
             noises_delay_millis: 2000,
             detection_threshold: 200,
             detection_gap_size: 30,
+            draw_mask: false
         }
     }
 }
