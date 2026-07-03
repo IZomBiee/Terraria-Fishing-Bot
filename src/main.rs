@@ -54,7 +54,10 @@ fn main() {
         Arc::clone(&settings),
         sonar_detector,
     );
-    std::thread::spawn(move || bot.run());
+    
+    std::thread::spawn(move || {
+        bot.run();
+    });
 
     let _ = ui::run(
         gui_tx,

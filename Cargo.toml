@@ -1,6 +1,6 @@
 [package]
 name = "terraria_fishing_bot"
-version = "0.4.4"
+version = "0.4.5"
 edition = "2024"
 
 [dependencies]
@@ -13,7 +13,7 @@ log = "0.4.29"
 mouse-rs = "0.4.2"
 mouse_position = "0.1.4"
 ndarray = "0.16.1"
-ocr-rs = "2.0.2"
+ocr-rs = "2.2.2"
 regex = "1.12.3"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"

@@ -1,6 +1,7 @@
 use device_query::{DeviceQuery, DeviceState, Keycode};
 use eframe::egui::Vec2;
 use eframe::{egui, egui::panel::*};
+use log::info;
 use std::sync::mpsc::Receiver;
 use std::sync::{Arc, RwLock, mpsc::Sender};
 use std::time::{Duration, Instant};
@@ -14,6 +15,7 @@ pub enum UiSended {
     LiquidGap(u32, u32),
     DetectedItems(Vec<String>),
     ChangeState(BotState),
+    SetFPS(f32),
 }
 
 struct App {
@@ -28,6 +30,7 @@ struct App {
     last_liquid_gap: Option<(u32, u32)>,
     last_state: BotState,
     local_settings: Settings,
+    fps: u64,
 }
 
 pub fn run(
@@ -61,6 +64,7 @@ pub fn run(
                 last_toggle_key_time: None,
                 last_liquid_gap: None,
                 last_state: BotState::Idle,
+                fps: 0
             }))
         }),
     )
@@ -174,7 +178,8 @@ impl App {
 
     fn information_contents(&mut self, ui: &mut egui::Ui) {
         ui.label(format!("State: {}", self.last_state));
-
+        ui.label(format!("FPS: {}", self.fps));
+        
         match self.last_state {
             BotState::Idle => {
                 if ui.button("Enable bot").on_hover_text("Hotkey: P").clicked() {
@@ -212,6 +217,9 @@ impl eframe::App for App {
                 UiSended::LiquidGap(y0, y1) => self.last_liquid_gap = Some((y0, y1)),
                 UiSended::DetectedItems(_items) => (),
                 UiSended::ChangeState(state) => self.last_state = state,
+                UiSended::SetFPS(fps) => {
+                    self.fps = fps as u64
+                },
             }
         }
 

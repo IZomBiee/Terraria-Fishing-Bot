@@ -1,5 +1,6 @@
 use crate::settings::Settings;
 use image::RgbaImage;
+use log::info;
 use mouse_position::mouse_position::Mouse;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, RwLock};
@@ -14,16 +15,14 @@ pub struct CursorCapturer {
     width: u32,
     height: u32,
     monitor: Monitor,
-    sleep_time: Duration,
-    frame_history: VecDeque<Instant>,
+    frametime_history: VecDeque<Instant>,
+    last_frame_start: Instant,
 }
 
 impl CursorCapturer {
     pub fn new(settings: Arc<RwLock<Settings>>, shared_frame: SharedFrame) -> Self {
         let monitor = Monitor::all()
-            .unwrap()
-            .first()
-            .expect("The monitor was not found!")
+            .unwrap()[1]
             .clone();
 
         Self {
@@ -32,13 +31,15 @@ impl CursorCapturer {
             width: monitor.width().unwrap(),
             height: monitor.height().unwrap(),
             monitor,
-            sleep_time: Duration::from_millis(1),
-            frame_history: VecDeque::with_capacity(10),
+            frametime_history: VecDeque::new(),
+            last_frame_start: Instant::now(),
         }
     }
 
     pub fn run(&mut self) {
         loop {
+            self.last_frame_start = Instant::now();
+
             if let Some(frame) = self.capture_logic()
                 && let Ok(mut lock) = self.shared_frame.lock()
             {
@@ -46,7 +47,6 @@ impl CursorCapturer {
             }
 
             self.manage_sleep();
-            std::thread::sleep(self.sleep_time);
         }
     }
 
@@ -55,72 +55,35 @@ impl CursorCapturer {
 
         let frame = self.monitor.capture_region(x0, y0, x1 - x0, y1 - y0).ok()?;
 
-        self.add_frame_history();
         Some(frame)
     }
 
     fn manage_sleep(&mut self) {
         let target_fps = self.settings.read().map(|s| s.capture.fps).unwrap_or(30);
-        let current_fps = self.get_fps();
-
-        if (current_fps as u8) > target_fps {
-            self.sleep_time += Duration::from_micros(500);
-        } else if self.sleep_time.as_micros() >= 500 {
-            self.sleep_time -= Duration::from_micros(500);
-        }
-    }
-
-    fn add_frame_history(&mut self) {
-        if self.frame_history.len() >= 10 {
-            self.frame_history.pop_front();
+        
+        if target_fps == 0 {
+            std::thread::sleep(Duration::from_millis(33));
+            return;
         }
 
-        self.frame_history.push_back(Instant::now());
-    }
+        let target_duration = Duration::from_secs_f32(1.0 / target_fps as f32);
+        
+        let elapsed = self.last_frame_start.elapsed();
 
-    pub fn get_fps(&self) -> f32 {
-        if self.frame_history.len() >= 2 {
-            let first = self.frame_history.front().unwrap();
-
-            let last = self.frame_history.back().unwrap();
-
-            let duration = *last - *first;
-
-            let count = self.frame_history.len() as f32;
-
-            return count / duration.as_secs_f32();
+        if elapsed < target_duration {
+            let sleep_needed = target_duration - elapsed;
+            std::thread::sleep(sleep_needed);
         }
-
-        0f32
     }
 
     pub fn get_frame(&mut self) -> Option<RgbaImage> {
         let region = self.get_region()?;
-
         let (x0, y0, x1, y1) = region;
 
         let frame = self
             .monitor
             .capture_region(x0, y0, x1 - x0, y1 - y0)
             .unwrap();
-
-        let target_fps = {
-            let Ok(settings) = self.settings.read() else {
-                return None;
-            };
-
-            settings.capture.fps
-        };
-
-        if (self.get_fps() as u8) > target_fps {
-            self.sleep_time += Duration::from_millis(1);
-        } else if self.sleep_time.as_millis() >= 5 {
-            self.sleep_time -= Duration::from_millis(1);
-        }
-
-        std::thread::sleep(self.sleep_time);
-
-        self.add_frame_history();
 
         Some(frame)
     }
@@ -140,18 +103,10 @@ impl CursorCapturer {
         let (mut x0, mut y0, mut x1, mut y1) =
             ((x - margin), (y - margin), (x + margin), (y + margin));
 
-        if x0 < 0 {
-            x0 = 0
-        };
-        if y0 < 0 {
-            y0 = 0
-        };
-        if x1 > self.width as i32 {
-            x1 = self.width as i32
-        };
-        if y1 > self.height as i32 {
-            y1 = self.height as i32
-        };
+        if x0 < 0 { x0 = 0 };
+        if y0 < 0 { y0 = 0 };
+        if x1 > self.width as i32 { x1 = self.width as i32 };
+        if y1 > self.height as i32 { y1 = self.height as i32 };
 
         if x1 - x0 <= 0 || y1 - y0 <= 0 {
             return None;

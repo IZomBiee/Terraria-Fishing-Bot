@@ -9,13 +9,10 @@ use serde::{Deserialize, Serialize};
 use strum_macros::AsRefStr;
 
 use std::{
-    fmt::Display,
-    sync::{
+    collections::VecDeque, fmt::Display, sync::{
         Arc, RwLock,
         mpsc::{Receiver, Sender},
-    },
-    thread::sleep,
-    time::{Duration, Instant},
+    }, thread::sleep, time::{Duration, Instant},
 };
 
 #[derive(Debug, PartialEq, AsRefStr, Clone, Copy)]
@@ -69,7 +66,10 @@ pub struct Bot {
     liquid_levels: Vec<u32>,
     noises: Vec<u32>,
     last_frame: Option<RgbaImage>,
+    frametime_history: VecDeque<Instant>,
 }
+
+unsafe impl Send for Bot {}
 
 impl Bot {
     pub fn new(
@@ -85,11 +85,12 @@ impl Bot {
             shared_frame,
             state: BotState::Idle,
             settings: Arc::clone(&settings),
-            controller: Controller::new(settings),
+            controller: Controller::new(Arc::clone(&settings)),
             sonar_detector,
             liquid_levels: Vec::new(),
             noises: Vec::new(),
             last_frame: None,
+            frametime_history: VecDeque::new()
         }
     }
 
@@ -111,10 +112,11 @@ impl Bot {
 
                 if should_update {
                     self.update(rgba_img);
+                    self.update_fps();
                 }
             }
 
-            sleep(Duration::from_millis(1000 / 60));
+            sleep(Duration::from_millis(5));
         }
     }
 
@@ -123,6 +125,37 @@ impl Bot {
         let _ = self.tx.send(UiSended::ChangeState(self.state));
         info!("Bot state: {}", self.state);
     }
+
+    fn update_fps(&mut self) {
+                let target_fps = self.settings.read().map(|s| s.capture.fps).unwrap_or(30) as i32;
+        let count_to_delete =  self.frametime_history.len() as i32 - target_fps;
+        if count_to_delete > 0 {
+            for _ in 0..=count_to_delete {
+                self.frametime_history.pop_front();
+            }
+                    let fps = self.get_fps();
+            let _ = self.tx.send(UiSended::SetFPS(fps));
+        }   
+
+        self.frametime_history.push_back(Instant::now());
+    }
+
+    pub fn get_fps(&self) -> f32 {
+        if self.frametime_history.len() >= 2 {
+            let first = self.frametime_history.front().unwrap();
+
+            let last = self.frametime_history.back().unwrap();
+
+            let duration = *last - *first;
+
+            let count = self.frametime_history.len() as f32;
+
+            return count / duration.as_secs_f32();
+        }
+
+        0f32
+    }
+
 
     fn get_liquid_level(mask: &GrayImage) -> Option<u32> {
         let mut max_stack = 0;
