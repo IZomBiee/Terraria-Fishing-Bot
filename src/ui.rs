@@ -1,7 +1,7 @@
 use device_query::{DeviceQuery, DeviceState, Keycode};
 use eframe::egui::Vec2;
 use eframe::{egui, egui::panel::*};
-use log::info;
+use std::str::FromStr;
 use std::sync::mpsc::Receiver;
 use std::sync::{Arc, RwLock, mpsc::Sender};
 use std::time::{Duration, Instant};
@@ -31,6 +31,8 @@ struct App {
     last_state: BotState,
     local_settings: Settings,
     fps: u64,
+    bot_toggle_hotkey_buffer: Vec<Keycode>,
+    is_choose_hotkey: bool,
 }
 
 pub fn run(
@@ -64,7 +66,9 @@ pub fn run(
                 last_toggle_key_time: None,
                 last_liquid_gap: None,
                 last_state: BotState::Idle,
-                fps: 0
+                fps: 0,
+                bot_toggle_hotkey_buffer: Vec::new(),
+                is_choose_hotkey: false
             }))
         }),
     )
@@ -131,7 +135,7 @@ impl App {
                 );
 
                 ui.add(
-                    egui::Slider::new(&mut settings.detection_threshold, 50..=500)
+                    egui::Slider::new(&mut settings.detection_threshold, 10..=500)
                         .text("Detection Threshold"),
                 );
 
@@ -174,6 +178,8 @@ impl App {
             ui.label("Use Potions");
             ui.checkbox(&mut self.local_settings.bot.use_potions, "");
         });
+
+        self.hotkey_selector(ui);
     }
 
     fn information_contents(&mut self, ui: &mut egui::Ui) {
@@ -182,19 +188,67 @@ impl App {
         
         match self.last_state {
             BotState::Idle => {
-                if ui.button("Enable bot").on_hover_text("Hotkey: P").clicked() {
+                if ui.button("Enable bot").on_hover_text(
+                    format!("Hotkey: {}", self.local_settings.bot.bot_toggle_hotkey.clone().unwrap_or("None".to_string()))
+                ).clicked() {
                     let _ = self.tx.send(BotCommand::Start);
                 }
             }
             _ => {
                 if ui
                     .button("Disable bot")
-                    .on_hover_text("Hotkey: P")
+                    .on_hover_text(format!("Hotkey: {}",
+                    App::keycodes_to_string(&self.bot_toggle_hotkey_buffer)))
                     .clicked()
                 {
                     let _ = self.tx.send(BotCommand::Stop);
                 }
             }
+        }
+    }
+
+    fn hotkey_selector(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.label("Hotkey: ");
+            if self.is_choose_hotkey {
+                let device_state = DeviceState::new();
+                self.bot_toggle_hotkey_buffer = device_state.get_keys();
+                
+                if self.bot_toggle_hotkey_buffer.contains(&Keycode::Escape) {
+                    self.is_choose_hotkey = false;
+                    self.last_toggle_key_time = Some(Instant::now());
+                } else if self.bot_toggle_hotkey_buffer.iter().any(|keycode| {keycode.to_string().len()==1}) {
+                    self.local_settings.bot.bot_toggle_hotkey = Some(App::keycodes_to_string(&self.bot_toggle_hotkey_buffer));
+                    self.is_choose_hotkey = false;
+                    self.last_toggle_key_time = Some(Instant::now());
+                }
+
+                if self.bot_toggle_hotkey_buffer.len() == 0 {
+                    let _ = ui.button("...");
+                } else {
+                    let _ = ui.button(App::keycodes_to_string(&self.bot_toggle_hotkey_buffer));
+                }
+
+            } else {
+                if ui.button(self.local_settings.bot.bot_toggle_hotkey.clone().unwrap_or("None".to_owned())).clicked() {
+                    self.is_choose_hotkey = true;
+                }
+            }
+        });
+    }
+
+    pub fn keycodes_to_string(keycode_vector: &Vec<Keycode>) -> String {
+        if keycode_vector.is_empty() {
+            return "None".to_string();
+        }
+        keycode_vector.iter().map(|keycode| keycode.to_string()).collect::<Vec<String>>().join("+")
+    }
+
+    pub fn string_to_keycodes(keycode_string: &str) -> Vec<Keycode> {
+        if keycode_string.is_empty() {
+            Vec::<Keycode>::new()
+        } else {
+            keycode_string.split("+").map(| keycode| Keycode::from_str(keycode).unwrap()).collect::<Vec<Keycode>>()
         }
     }
 
@@ -229,21 +283,24 @@ impl eframe::App for App {
 
         let device_state = DeviceState::new();
         let keys = device_state.get_keys();
-        if keys.contains(&Keycode::P) {
-            if self.last_toggle_key_time.is_none()
-                || self.last_toggle_key_time.unwrap().elapsed() > Duration::from_millis(100)
-            {
-                match self.last_state {
-                    BotState::Idle => {
-                        let _ = self.tx.send(BotCommand::Start);
-                    }
-                    _ => {
-                        let _ = self.tx.send(BotCommand::Stop);
+        if let Some(hotkey) = &self.local_settings.bot.bot_toggle_hotkey {
+            let needed_keycodes = App::string_to_keycodes(hotkey);
+            if keys.eq(&needed_keycodes) {
+                if self.last_toggle_key_time.is_none()
+                    || self.last_toggle_key_time.unwrap().elapsed() > Duration::from_millis(100)
+                {
+                    match self.last_state {
+                        BotState::Idle => {
+                            let _ = self.tx.send(BotCommand::Start);
+                        }
+                        _ => {
+                            let _ = self.tx.send(BotCommand::Stop);
+                        }
                     }
                 }
-            }
-            self.last_toggle_key_time = Some(Instant::now());
-        };
+                self.last_toggle_key_time = Some(Instant::now());
+            };
+        }
 
         let maybe_img = self
             .shared_frame

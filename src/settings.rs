@@ -26,6 +26,7 @@ pub struct BotSettings {
     pub use_potions: bool,
     pub potion_use_delay: Duration,
     pub detection_method: bot::DetectionMethod,
+    pub bot_toggle_hotkey: Option<String>,
 }
 
 impl Default for BotSettings {
@@ -35,6 +36,7 @@ impl Default for BotSettings {
             use_potions: false,
             potion_use_delay: Duration::from_secs(20),
             detection_method: bot::DetectionMethod::MoveMap,
+            bot_toggle_hotkey: None,
         }
     }
 }

@@ -1,8 +1,6 @@
 use crate::settings::Settings;
 use image::RgbaImage;
-use log::info;
 use mouse_position::mouse_position::Mouse;
-use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 use xcap::Monitor;
@@ -15,7 +13,6 @@ pub struct CursorCapturer {
     width: u32,
     height: u32,
     monitor: Monitor,
-    frametime_history: VecDeque<Instant>,
     last_frame_start: Instant,
 }
 
@@ -31,7 +28,6 @@ impl CursorCapturer {
             width: monitor.width().unwrap(),
             height: monitor.height().unwrap(),
             monitor,
-            frametime_history: VecDeque::new(),
             last_frame_start: Instant::now(),
         }
     }

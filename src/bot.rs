@@ -127,7 +127,7 @@ impl Bot {
     }
 
     fn update_fps(&mut self) {
-                let target_fps = self.settings.read().map(|s| s.capture.fps).unwrap_or(30) as i32;
+        let target_fps = self.settings.read().map(|s| s.capture.fps).unwrap_or(30) as i32;
         let count_to_delete =  self.frametime_history.len() as i32 - target_fps;
         if count_to_delete > 0 {
             for _ in 0..=count_to_delete {

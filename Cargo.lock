@@ -4705,7 +4705,7 @@ dependencies = [
 
 [[package]]
 name = "terraria_fishing_bot"
-version = "0.4.5"
+version = "0.4.7"
 dependencies = [
  "device_query",
  "eframe",
