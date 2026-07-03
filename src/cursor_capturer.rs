@@ -1,5 +1,6 @@
 use crate::settings::Settings;
 use image::RgbaImage;
+use log::info;
 use mouse_position::mouse_position::Mouse;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
@@ -18,9 +19,11 @@ pub struct CursorCapturer {
 
 impl CursorCapturer {
     pub fn new(settings: Arc<RwLock<Settings>>, shared_frame: SharedFrame) -> Self {
+
         let monitor = Monitor::all()
-            .unwrap()[1]
-            .clone();
+            .expect("Could not get monitors!")
+            .iter().find(|monitor| monitor.is_primary().unwrap_or(false))
+            .expect("Could not find any primary screens!").clone();
 
         Self {
             settings,

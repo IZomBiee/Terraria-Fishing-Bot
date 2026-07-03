@@ -6,7 +6,6 @@ use std::{fs, time::Duration};
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct CaptureSettings {
     pub margin: u32,
-    pub monitor_id: u8,
     pub fps: u8,
 }
 
@@ -14,7 +13,6 @@ impl Default for CaptureSettings {
     fn default() -> Self {
         Self {
             margin: 200,
-            monitor_id: 0,
             fps: 30,
         }
     }
