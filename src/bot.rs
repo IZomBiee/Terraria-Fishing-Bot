@@ -409,7 +409,7 @@ impl Bot {
                     self.set_state(BotState::Cast);
                 }
                 _ => {
-                    todo!();
+                    info!("YOLO mode is still in development...");
                 }
             }
 

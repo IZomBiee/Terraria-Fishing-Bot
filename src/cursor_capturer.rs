@@ -1,6 +1,5 @@
 use crate::settings::Settings;
 use image::RgbaImage;
-use log::info;
 use mouse_position::mouse_position::Mouse;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
