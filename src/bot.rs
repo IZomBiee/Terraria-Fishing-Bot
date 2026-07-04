@@ -19,10 +19,10 @@ use std::{
 pub enum BotState {
     Idle,
     WaitingForBite,
-    CheckingBite,
     Cast,
     Catch,
     CastingCooldown(Instant),
+    CatchingCooldown(Instant),
     CheckingLiquidLevel(Instant),
     CheckingNoise(Instant),
 }
@@ -32,10 +32,10 @@ impl Display for BotState {
         let name = match self {
             BotState::Idle => "Idle",
             BotState::WaitingForBite => "WaitingForBite",
-            BotState::CheckingBite => "CheckingBite",
             BotState::Cast => "Cast",
             BotState::Catch => "Catch",
             BotState::CastingCooldown(..) => "CastingCooldown",
+            BotState::CatchingCooldown(..) => "CatchingCooldown",
             BotState::CheckingLiquidLevel(..) => "CheckingLiquidLevel",
             BotState::CheckingNoise(..) => "CheckingNoise",
         };
@@ -68,6 +68,7 @@ pub struct Bot {
     noises: Vec<u32>,
     last_frame: Option<RgbaImage>,
     frametime_history: VecDeque<Instant>,
+    last_cast_time: Instant,
 }
 
 unsafe impl Send for Bot {}
@@ -93,7 +94,8 @@ impl Bot {
             liquid_levels: Vec::new(),
             noises: Vec::new(),
             last_frame: None,
-            frametime_history: VecDeque::new()
+            frametime_history: VecDeque::new(),
+            last_cast_time: Instant::now(),
         }
     }
 
@@ -229,7 +231,6 @@ impl Bot {
 
     fn waiting_for_bite_logic(&mut self, last_frame: &RgbaImage, maybe_difference_mask: Option<&GrayImage>) {
         let (
-            use_potions,
             detection_method,
             detection_threshold,
             sonar_detection_words,
@@ -237,17 +238,12 @@ impl Bot {
         ) = {
             let settings = self.settings.read().unwrap();
             (
-                settings.bot.use_potions,
                 settings.bot.detection_method.clone(),
                 settings.movemap.detection_threshold,
                 settings.sonar.sonar_detection_words.clone(),
                 settings.sonar.sonar_detection_threshold,
             )
         };
-
-        if use_potions {
-            self.controller.use_potions_if_necessery();
-        }
 
         match detection_method {
             DetectionMethod::MoveMap => {
@@ -258,7 +254,7 @@ impl Bot {
                 let abs_difference = self.get_abs_difference(difference_mask);
 
                 let Some(abs_difference) = abs_difference else {
-                    info!("Could not read movement! Recast.");
+                    info!("Could not read movement! Recalibrate.");
                     self.controller.catch();
                     self.set_state(BotState::CheckingLiquidLevel(Instant::now()));
                     return;
@@ -270,7 +266,7 @@ impl Bot {
                         self.set_state(BotState::Catch);
                     }
                 } else {
-                    info!("Could not noise level! Recast.");
+                    info!("Could not read noise level! Recalibrate.");
                     self.controller.catch();
                     self.set_state(BotState::CheckingNoise(Instant::now()));
                 }
@@ -331,6 +327,9 @@ impl Bot {
         }
 
         match self.state {
+            BotState::Idle => {
+                
+            }
             BotState::CheckingLiquidLevel(time) => {
                 if let Some(difference_mask) = maybe_difference_mask.as_ref() {
                     if let Some(level) = Bot::get_liquid_level(&difference_mask) {
@@ -377,8 +376,10 @@ impl Bot {
 
             BotState::Cast => {
                 self.controller.cast();
+                self.last_cast_time = Instant::now();
+
                 if self.settings.read().unwrap().bot.use_potions {
-                    self.controller.use_potions();
+                    self.controller.use_potions_if_necessery();
                 }
 
                 self.set_state(BotState::CastingCooldown(Instant::now()));
@@ -393,14 +394,23 @@ impl Bot {
 
             BotState::WaitingForBite => {
                 self.waiting_for_bite_logic(&frame, maybe_difference_mask.as_ref());
+                if self.last_cast_time.elapsed() > Duration::from_secs(30) {
+                    info!("Waiting for bite for too long ({} s)! Recast.", self.last_cast_time.elapsed().as_secs());
+                    self.set_state(BotState::Catch);
+                }
             }
 
             BotState::Catch => {
                 self.controller.catch();
-                self.set_state(BotState::Cast);
+                self.set_state(BotState::CatchingCooldown(Instant::now()));
             }
 
-            _ => {}
+            BotState::CatchingCooldown(time) => {
+                let delay = self.settings.read().unwrap().bot.catching_delay_millis;
+                if time.elapsed() > Duration::from_millis(delay) {
+                    self.set_state(BotState::Cast);
+                }
+            }
         }
 
         self.last_frame = Some(frame);

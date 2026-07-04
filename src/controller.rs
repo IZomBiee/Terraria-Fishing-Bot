@@ -25,22 +25,20 @@ impl Controller {
         self.mouse
             .press(&Keys::LEFT)
             .expect("Unable to press button");
-        thread::sleep(Duration::from_millis(150));
+        thread::sleep(Duration::from_millis(50));
         self.mouse
             .release(&Keys::LEFT)
             .expect("Unable to release button");
-        thread::sleep(Duration::from_millis(50));
     }
 
     pub fn cast(&self) {
         self.mouse
             .press(&Keys::LEFT)
             .expect("Unable to press button");
-        thread::sleep(Duration::from_millis(150));
+        thread::sleep(Duration::from_millis(50));
         self.mouse
             .release(&Keys::LEFT)
             .expect("Unable to release button");
-        thread::sleep(Duration::from_millis(50));
     }
 
     pub fn use_potions(&mut self) {

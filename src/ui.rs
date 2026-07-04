@@ -182,6 +182,13 @@ impl App {
             )
             .text("Casting Delay"),
         );
+        ui.add(
+            egui::Slider::new(
+                &mut self.local_settings.bot.catching_delay_millis,
+                100..=1000,
+            )
+            .text("Catching Delay"),
+        );
         ui.horizontal(|ui| {
             ui.label("Use Potions");
             ui.checkbox(&mut self.local_settings.bot.use_potions, "");
