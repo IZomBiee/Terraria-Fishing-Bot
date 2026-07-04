@@ -227,7 +227,7 @@ impl Bot {
         Some(opencv::rgba_difference_mask(current_frame, last_image))
     }
 
-    fn waiting_for_bite_logic(&mut self, last_frame: &RgbaImage, difference_mask: &GrayImage) {
+    fn waiting_for_bite_logic(&mut self, last_frame: &RgbaImage, maybe_difference_mask: Option<&GrayImage>) {
         let (
             use_potions,
             detection_method,
@@ -251,6 +251,10 @@ impl Bot {
 
         match detection_method {
             DetectionMethod::MoveMap => {
+                let Some(difference_mask) = maybe_difference_mask else {
+                    return;
+                };
+
                 let abs_difference = self.get_abs_difference(difference_mask);
 
                 let Some(abs_difference) = abs_difference else {
@@ -307,12 +311,13 @@ impl Bot {
     }
 
     pub fn update(&mut self, frame: RgbaImage) {
-        let Some(difference_mask) = self.get_difference_mask(&frame) else {
-            self.last_frame = Some(frame.clone());
-            return;
-        };
+        let mut maybe_difference_mask: Option<GrayImage> = None;
 
-        if self.settings.read().unwrap().movemap.draw_mask {
+        if self.settings.read().unwrap().bot.detection_method == DetectionMethod::MoveMap {
+            maybe_difference_mask = self.get_difference_mask(&frame);
+        }
+
+        if self.settings.read().unwrap().movemap.draw_mask && let Some(difference_mask) = maybe_difference_mask.as_ref() {
             let rgba_frame: image::RgbaImage = 
                 image::DynamicImage::ImageLuma8(difference_mask.clone()).to_rgba8();
             
@@ -327,9 +332,11 @@ impl Bot {
 
         match self.state {
             BotState::CheckingLiquidLevel(time) => {
-                if let Some(level) = Bot::get_liquid_level(&difference_mask) {
-                    self.liquid_levels.push(level);
-                    self.liquid_levels.sort();
+                if let Some(difference_mask) = maybe_difference_mask.as_ref() {
+                    if let Some(level) = Bot::get_liquid_level(&difference_mask) {
+                        self.liquid_levels.push(level);
+                        self.liquid_levels.sort();
+                    }
                 }
 
                 let delay = self
@@ -351,8 +358,10 @@ impl Bot {
             }
 
             BotState::CheckingNoise(time) => {
-                if let Some(level) = self.get_abs_difference(&difference_mask) {
-                    self.noises.push(level);
+                if let Some(difference_mask) = maybe_difference_mask.as_ref() {
+                    if let Some(level) = self.get_abs_difference(&difference_mask) {
+                        self.noises.push(level);
+                    }
                 }
 
                 let delay = self.settings.read().unwrap().movemap.noises_delay_millis;
@@ -383,7 +392,7 @@ impl Bot {
             }
 
             BotState::WaitingForBite => {
-                self.waiting_for_bite_logic(&frame, &difference_mask);
+                self.waiting_for_bite_logic(&frame, maybe_difference_mask.as_ref());
             }
 
             BotState::Catch => {
