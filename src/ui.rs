@@ -1,6 +1,7 @@
 use device_query::{DeviceQuery, DeviceState, Keycode};
 use eframe::egui::Vec2;
 use eframe::{egui, egui::panel::*};
+use log::info;
 use std::str::FromStr;
 use std::sync::mpsc::Receiver;
 use std::sync::{Arc, RwLock, mpsc::Sender};
@@ -284,7 +285,9 @@ impl eframe::App for App {
         if let Ok(recived) = self.rx.try_recv() {
             match recived {
                 UiSended::LiquidGap(y0, y1) => self.last_liquid_gap = Some((y0, y1)),
-                UiSended::DetectedItems(_items) => (),
+                UiSended::DetectedItems(items) => {
+                    info!("Detected words {}", items.join(" "));
+                },
                 UiSended::ChangeState(state) => self.last_state = state,
                 UiSended::SetFPS(fps) => {
                     self.fps = fps as u64
