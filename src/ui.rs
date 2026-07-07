@@ -124,28 +124,25 @@ impl App {
         match detection_method {
             DetectionMethod::MoveMap => {
                 let settings = &mut self.local_settings.movemap;
+
                 ui.add(
-                    egui::Slider::new(&mut settings.liquid_offset, -20..=20).text("Liquid Offset"),
+                    egui::Slider::new(&mut settings.liquid_detection_delay_ms, 500..=5000)
+                        .text("Liquid Detection Delay (ms)"),
                 );
 
                 ui.add(
-                    egui::Slider::new(&mut settings.liquid_detection_delay_millis, 500..=5000)
-                        .text("Liquid Detection Delay"),
+                    egui::Slider::new(&mut settings.detection_gap_size_precents, 10..=100)
+                        .text("Detection Gap Size (%)"),
                 );
 
                 ui.add(
-                    egui::Slider::new(&mut settings.noises_delay_millis, 500..=5000)
-                        .text("Noise Detection Delay"),
+                    egui::Slider::new(&mut settings.calibration_time_ms, 3000..=10000)
+                        .text("Calibration Time (ms)"),
                 );
 
                 ui.add(
-                    egui::Slider::new(&mut settings.detection_threshold, 10..=500)
-                        .text("Detection Threshold"),
-                );
-
-                ui.add(
-                    egui::Slider::new(&mut settings.detection_gap_size, 10..=100)
-                        .text("Detection Gap Size"),
+                    egui::Slider::new(&mut settings.calibration_multiplier_precents, 30..=100)
+                        .text("Calibration Multiplier (%)"),
                 );
 
                 ui.horizontal(|ui| {

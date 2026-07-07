@@ -36,29 +36,27 @@ impl Default for BotSettings {
             use_potions: false,
             potion_use_delay: Duration::from_secs(20),
             detection_method: bot::DetectionMethod::MoveMap,
-            bot_toggle_hotkey: None,
+            bot_toggle_hotkey: Some("p".to_owned()),
         }
     }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct MovemapSettings {
-    pub liquid_offset: i32,
-    pub liquid_detection_delay_millis: u64,
-    pub noises_delay_millis: u64,
-    pub detection_threshold: u32,
-    pub detection_gap_size: u32,
+    pub liquid_detection_delay_ms: u64,
+    pub detection_gap_size_precents: u8,
+    pub calibration_time_ms: u64,
+    pub calibration_multiplier_precents: u8,
     pub draw_mask: bool,
 }
 
 impl Default for MovemapSettings {
     fn default() -> Self {
         Self {
-            liquid_offset: -10,
-            liquid_detection_delay_millis: 1000,
-            noises_delay_millis: 2000,
-            detection_threshold: 200,
-            detection_gap_size: 30,
+            liquid_detection_delay_ms: 1000,
+            detection_gap_size_precents: 30,
+            calibration_time_ms: 5000,
+            calibration_multiplier_precents: 60,
             draw_mask: false
         }
     }

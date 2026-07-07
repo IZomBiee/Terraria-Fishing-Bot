@@ -38,3 +38,4 @@ Terraria advanced fishing bot, written entirely in Rust. Created for practicing/
 - Bot tracking area around cursor.
 - The bot may not work properly in hell due to distortion. It is better to set a contrasting background.
 - During heavy rain, false alarms sometimes occur. It is better to put up a roof.
+- While fishing in lava, it is recommended to increase the gap size, threshold, and noise delay in movemap mode due to lava bubbles.

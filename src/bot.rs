@@ -24,7 +24,7 @@ pub enum BotState {
     CastingCooldown(Instant),
     CatchingCooldown(Instant),
     CheckingLiquidLevel(Instant),
-    CheckingNoise(Instant),
+    Calibrate(Instant),
 }
 
 impl Display for BotState {
@@ -37,7 +37,7 @@ impl Display for BotState {
             BotState::CastingCooldown(..) => "CastingCooldown",
             BotState::CatchingCooldown(..) => "CatchingCooldown",
             BotState::CheckingLiquidLevel(..) => "CheckingLiquidLevel",
-            BotState::CheckingNoise(..) => "CheckingNoise",
+            BotState::Calibrate(..) => "Calibrate",
         };
         write!(f, "{}", name)
     }
@@ -65,10 +65,11 @@ pub struct Bot {
     tx: Sender<UiSended>,
     controller: Controller,
     liquid_levels: Vec<u32>,
-    noises: Vec<u32>,
     last_frame: Option<RgbaImage>,
     frametime_history: VecDeque<Instant>,
     last_cast_time: Instant,
+    calibration_results: Vec<u32>,
+    movemap_threshold: Option<u32>
 }
 
 unsafe impl Send for Bot {}
@@ -92,10 +93,11 @@ impl Bot {
             controller: Controller::new(Arc::clone(&settings)),
             sonar_detector,
             liquid_levels: Vec::new(),
-            noises: Vec::new(),
             last_frame: None,
             frametime_history: VecDeque::new(),
             last_cast_time: Instant::now(),
+            movemap_threshold: None,
+            calibration_results: Vec::new(),
         }
     }
 
@@ -191,16 +193,13 @@ impl Bot {
         Some(mean)
     }
 
-    fn get_max_noise_level(&self) -> Option<u32> {
-        self.noises.iter().max().cloned()
-    }
-
     fn get_detection_gap(&self) -> Option<(u32, u32)> {
         let settings = self.settings.read().unwrap();
 
         if let Some(liquid_level) = self.get_mean_liquid_level() {
-            let liquid_level = liquid_level as i32 + settings.movemap.liquid_offset;
-            let gap = liquid_level - settings.movemap.detection_gap_size as i32;
+            let liquid_level = liquid_level as i32;
+            let gap_height = (settings.capture.margin*2) as f32*(settings.movemap.detection_gap_size_precents as f32/100.0);
+            let gap = liquid_level - (gap_height.round() as i32);
             if liquid_level > 0 {
                 return Some((std::cmp::max(gap, 0) as u32, liquid_level as u32));
             }
@@ -214,8 +213,8 @@ impl Bot {
             let stop_idx = (y_stop * mask.width()) as usize;
             let abs_difference: u32 = mask.as_raw()[start_idx..stop_idx]
                 .iter()
-                .filter(|pixel| *(*pixel) > 0)
-                .count() as u32;
+                .map(|&pixel| pixel as u32)
+                .sum();
             return Some(abs_difference);
         }
         None
@@ -232,14 +231,12 @@ impl Bot {
     fn waiting_for_bite_logic(&mut self, last_frame: &RgbaImage, maybe_difference_mask: Option<&GrayImage>) {
         let (
             detection_method,
-            detection_threshold,
             sonar_detection_words,
             sonar_detection_threshold,
         ) = {
             let settings = self.settings.read().unwrap();
             (
                 settings.bot.detection_method.clone(),
-                settings.movemap.detection_threshold,
                 settings.sonar.sonar_detection_words.clone(),
                 settings.sonar.sonar_detection_threshold,
             )
@@ -260,15 +257,11 @@ impl Bot {
                     return;
                 };
 
-                if let Some(noise) = self.get_max_noise_level() {
-                    if abs_difference > noise + detection_threshold {
-                        info!("Movement detected ({}/{}).", abs_difference, noise + detection_threshold);
-                        self.set_state(BotState::Catch);
-                    }
-                } else {
-                    info!("Could not read noise level! Recalibrate.");
-                    self.controller.catch();
-                    self.set_state(BotState::CheckingNoise(Instant::now()));
+
+
+                if abs_difference > self.movemap_threshold.unwrap() {
+                    info!("Movement detected ({}/{}).", abs_difference, self.movemap_threshold.unwrap());
+                    self.set_state(BotState::Catch);
                 }
             }
             DetectionMethod::Sonar => {
@@ -343,7 +336,7 @@ impl Bot {
                     .read()
                     .unwrap()
                     .movemap
-                    .liquid_detection_delay_millis;
+                    .liquid_detection_delay_ms;
 
                 if time.elapsed() > Duration::from_millis(delay)
                     && let Some(mean_liquid_level) = self.get_mean_liquid_level()
@@ -352,24 +345,6 @@ impl Bot {
                     if let Some(gap) = self.get_detection_gap() {
                         let _ = self.tx.send(UiSended::LiquidGap(gap.0, gap.1));
                     }
-                    self.set_state(BotState::CheckingNoise(Instant::now()));
-                }
-            }
-
-            BotState::CheckingNoise(time) => {
-                if let Some(difference_mask) = maybe_difference_mask.as_ref() {
-                    if let Some(level) = self.get_abs_difference(&difference_mask) {
-                        self.noises.push(level);
-                    }
-                }
-
-                let delay = self.settings.read().unwrap().movemap.noises_delay_millis;
-
-                if time.elapsed() > Duration::from_millis(delay)
-                    && let Some(max_noise_level) = self.get_max_noise_level()
-                {
-                    info!("The noise level is: {}", max_noise_level);
-
                     self.set_state(BotState::Cast);
                 }
             }
@@ -388,6 +363,36 @@ impl Bot {
             BotState::CastingCooldown(time) => {
                 let delay = self.settings.read().unwrap().bot.casting_delay_millis;
                 if time.elapsed() > Duration::from_millis(delay) {
+                    if self.movemap_threshold.is_some() {
+                        self.set_state(BotState::WaitingForBite);
+                    } else {
+                        self.calibration_results.clear();
+                        self.set_state(BotState::Calibrate(Instant::now()));
+                    }
+                }
+            }
+
+            BotState::Calibrate(time) => {
+                if time.elapsed() < Duration::from_millis(self.settings.read().unwrap().movemap.calibration_time_ms) {
+                    let Some(difference_mask) = maybe_difference_mask.as_ref() else {
+                        return;
+                    };
+
+                    let abs_difference = self.get_abs_difference(difference_mask);
+
+                    let Some(abs_difference) = abs_difference else {
+                        return;
+                    };
+
+                    self.calibration_results.push(abs_difference);
+                } else {
+                    let calibration_multiplier = (self.settings.read().unwrap().movemap.calibration_multiplier_precents as f32)/100.0;
+                    let calibration_result = ((self.calibration_results.iter().max().cloned().unwrap() as f32)*calibration_multiplier) as u32;
+
+                    info!("Calibrated threshold is {}.", calibration_result);
+                    
+                    self.movemap_threshold = Some(calibration_result);
+                    
                     self.set_state(BotState::WaitingForBite);
                 }
             }
@@ -451,6 +456,8 @@ impl Bot {
                 }
             }
 
+            self.movemap_threshold = None;
+
             return true;
         }
         false
@@ -460,7 +467,6 @@ impl Bot {
         if self.state != BotState::Idle {
             info!("Stoping bot");
             self.liquid_levels.clear();
-            self.noises.clear();
             self.set_state(BotState::Idle);
         }
     }

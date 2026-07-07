@@ -49,6 +49,31 @@ pub fn rgba_2_rgb(rgba: &RgbaImage) -> RgbImage {
     rgb
 }
 
+pub fn rgba_bool_difference_mask(img1: &RgbaImage, img2: &RgbaImage) -> GrayImage {
+    assert_eq!(
+        img1.dimensions(),
+        img2.dimensions(),
+        "Images must have the same dimensions"
+    );
+
+    let (width, height) = img1.dimensions();
+
+    let mut mask = GrayImage::new(width, height);
+
+    for (x, y, p1) in img1.enumerate_pixels() {
+        let p2 = img2.get_pixel(x, y);
+
+        if p1.eq(p2) {
+            mask.put_pixel(x, y, Luma([0]));
+        } else {
+            mask.put_pixel(x, y, Luma([255]));
+        }
+    }
+
+    mask
+}
+
+
 pub fn rgba_difference_mask(img1: &RgbaImage, img2: &RgbaImage) -> GrayImage {
     assert_eq!(
         img1.dimensions(),
