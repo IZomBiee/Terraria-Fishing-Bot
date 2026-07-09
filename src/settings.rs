@@ -12,7 +12,7 @@ pub struct CaptureSettings {
 impl Default for CaptureSettings {
     fn default() -> Self {
         Self {
-            margin: 200,
+            margin: 150,
             fps: 30,
         }
     }
@@ -36,7 +36,7 @@ impl Default for BotSettings {
             use_potions: false,
             potion_use_delay: Duration::from_secs(20),
             detection_method: bot::DetectionMethod::MoveMap,
-            bot_toggle_hotkey: Some("p".to_owned()),
+            bot_toggle_hotkey: Some("P".to_owned()),
         }
     }
 }
@@ -55,7 +55,7 @@ impl Default for MovemapSettings {
         Self {
             liquid_detection_delay_ms: 1000,
             detection_gap_size_precents: 30,
-            calibration_time_ms: 5000,
+            calibration_time_ms: 7000,
             calibration_multiplier_precents: 60,
             draw_mask: false
         }

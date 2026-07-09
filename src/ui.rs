@@ -261,7 +261,10 @@ impl App {
         if keycode_string.is_empty() {
             Vec::<Keycode>::new()
         } else {
-            keycode_string.split("+").map(| keycode| Keycode::from_str(keycode).unwrap()).collect::<Vec<Keycode>>()
+            keycode_string
+            .split("+")
+            .filter_map(|keycode| Keycode::from_str(keycode.trim()).ok()) // Safely converts Err to None and skips it
+            .collect()
         }
     }
 
