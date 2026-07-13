@@ -73,7 +73,6 @@ pub fn rgba_bool_difference_mask(img1: &RgbaImage, img2: &RgbaImage) -> GrayImag
     mask
 }
 
-
 pub fn rgba_difference_mask(img1: &RgbaImage, img2: &RgbaImage) -> GrayImage {
     assert_eq!(
         img1.dimensions(),

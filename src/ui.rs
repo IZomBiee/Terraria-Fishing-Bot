@@ -14,9 +14,9 @@ use crate::ui_terminal::UiTerminal;
 
 pub enum UiSended {
     LiquidGap(u32, u32),
-    DetectedItems(Vec<String>),
+    DetectedItem(String),
     ChangeState(BotState),
-    SetFPS(f32)
+    SetFPS(f32),
 }
 
 struct App {
@@ -72,7 +72,7 @@ pub fn run(
                 last_state: BotState::Idle,
                 fps: 0,
                 bot_toggle_hotkey_buffer: Vec::new(),
-                is_choose_hotkey: false
+                is_choose_hotkey: false,
             }))
         }),
     )
@@ -116,7 +116,6 @@ impl App {
                 .selected_text(format!("{:?}", detection_method))
                 .show_ui(ui, |ui| {
                     ui.selectable_value(detection_method, DetectionMethod::MoveMap, "MoveMap");
-                    ui.selectable_value(detection_method, DetectionMethod::Yolo, "YOLO");
                     ui.selectable_value(detection_method, DetectionMethod::Sonar, "Sonar");
                 });
         });
@@ -163,7 +162,13 @@ impl App {
                         .text("Threshold"),
                 );
             }
-            _ => {}
+            DetectionMethod::Audio => {
+                let settings = &mut self.local_settings.audio;
+
+                ui.add(
+                    egui::Slider::new(&mut settings.min_confidence, 0..=100).text("Min Confidence"),
+                );
+            }
         };
     }
 
@@ -198,20 +203,31 @@ impl App {
     fn information_contents(&mut self, ui: &mut egui::Ui) {
         ui.label(format!("State: {}", self.last_state));
         ui.label(format!("FPS: {}", self.fps));
-        
+
         match self.last_state {
             BotState::Idle => {
-                if ui.button("Enable bot").on_hover_text(
-                    format!("Hotkey: {}", self.local_settings.bot.bot_toggle_hotkey.clone().unwrap_or("None".to_string()))
-                ).clicked() {
+                if ui
+                    .button("Enable bot")
+                    .on_hover_text(format!(
+                        "Hotkey: {}",
+                        self.local_settings
+                            .bot
+                            .bot_toggle_hotkey
+                            .clone()
+                            .unwrap_or("None".to_string())
+                    ))
+                    .clicked()
+                {
                     let _ = self.tx.send(BotCommand::Start);
                 }
             }
             _ => {
                 if ui
                     .button("Disable bot")
-                    .on_hover_text(format!("Hotkey: {}",
-                    App::keycodes_to_string(&self.bot_toggle_hotkey_buffer)))
+                    .on_hover_text(format!(
+                        "Hotkey: {}",
+                        App::keycodes_to_string(&self.bot_toggle_hotkey_buffer)
+                    ))
                     .clicked()
                 {
                     let _ = self.tx.send(BotCommand::Stop);
@@ -226,12 +242,17 @@ impl App {
             if self.is_choose_hotkey {
                 let device_state = DeviceState::new();
                 self.bot_toggle_hotkey_buffer = device_state.get_keys();
-                
+
                 if self.bot_toggle_hotkey_buffer.contains(&Keycode::Escape) {
                     self.is_choose_hotkey = false;
                     self.last_toggle_key_time = Some(Instant::now());
-                } else if self.bot_toggle_hotkey_buffer.iter().any(|keycode| {keycode.to_string().len()==1}) {
-                    self.local_settings.bot.bot_toggle_hotkey = Some(App::keycodes_to_string(&self.bot_toggle_hotkey_buffer));
+                } else if self
+                    .bot_toggle_hotkey_buffer
+                    .iter()
+                    .any(|keycode| keycode.to_string().len() == 1)
+                {
+                    self.local_settings.bot.bot_toggle_hotkey =
+                        Some(App::keycodes_to_string(&self.bot_toggle_hotkey_buffer));
                     self.is_choose_hotkey = false;
                     self.last_toggle_key_time = Some(Instant::now());
                 }
@@ -241,9 +262,17 @@ impl App {
                 } else {
                     let _ = ui.button(App::keycodes_to_string(&self.bot_toggle_hotkey_buffer));
                 }
-
             } else {
-                if ui.button(self.local_settings.bot.bot_toggle_hotkey.clone().unwrap_or("None".to_owned())).clicked() {
+                if ui
+                    .button(
+                        self.local_settings
+                            .bot
+                            .bot_toggle_hotkey
+                            .clone()
+                            .unwrap_or("None".to_owned()),
+                    )
+                    .clicked()
+                {
                     self.is_choose_hotkey = true;
                 }
             }
@@ -254,7 +283,11 @@ impl App {
         if keycode_vector.is_empty() {
             return "None".to_string();
         }
-        keycode_vector.iter().map(|keycode| keycode.to_string()).collect::<Vec<String>>().join("+")
+        keycode_vector
+            .iter()
+            .map(|keycode| keycode.to_string())
+            .collect::<Vec<String>>()
+            .join("+")
     }
 
     pub fn string_to_keycodes(keycode_string: &str) -> Vec<Keycode> {
@@ -262,9 +295,9 @@ impl App {
             Vec::<Keycode>::new()
         } else {
             keycode_string
-            .split("+")
-            .filter_map(|keycode| Keycode::from_str(keycode.trim()).ok()) // Safely converts Err to None and skips it
-            .collect()
+                .split("+")
+                .filter_map(|keycode| Keycode::from_str(keycode.trim()).ok()) // Safely converts Err to None and skips it
+                .collect()
         }
     }
 
@@ -285,13 +318,11 @@ impl eframe::App for App {
         if let Ok(recived) = self.rx.try_recv() {
             match recived {
                 UiSended::LiquidGap(y0, y1) => self.last_liquid_gap = Some((y0, y1)),
-                UiSended::DetectedItems(items) => {
-                    info!("Detected words {}", items.join(" "));
-                },
-                UiSended::ChangeState(state) => self.last_state = state,
-                UiSended::SetFPS(fps) => {
-                    self.fps = fps as u64
+                UiSended::DetectedItem(item) => {
+                    info!("Detected word: {}", item);
                 }
+                UiSended::ChangeState(state) => self.last_state = state,
+                UiSended::SetFPS(fps) => self.fps = fps as u64,
             }
         }
 

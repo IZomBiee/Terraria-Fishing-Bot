@@ -1,57 +1,52 @@
 use crate::settings::Settings;
-use enigo::{Enigo, Key, Keyboard};
+use enigo::{Button, Direction, Enigo, Key, Keyboard, Mouse, Settings as EnigoSettings};
 use log::{error, info};
-use mouse_rs::{Mouse, types::keys::Keys};
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
 pub struct Controller {
-    pub mouse: Mouse,
+    pub enigo: Enigo,
     pub settings: Arc<RwLock<Settings>>,
     pub last_potion_use_time: Option<Instant>,
 }
 
 impl Controller {
     pub fn new(settings: Arc<RwLock<Settings>>) -> Controller {
+        let enigo = Enigo::new(&EnigoSettings::default()).expect("Could not initialize Enigo");
         Controller {
-            mouse: Mouse::new(),
+            enigo,
             settings,
             last_potion_use_time: None,
         }
     }
 
-    pub fn catch(&self) {
-        self.mouse
-            .press(&Keys::LEFT)
+    pub fn catch(&mut self) {
+        self.enigo
+            .button(Button::Left, Direction::Press)
             .expect("Unable to press button");
         thread::sleep(Duration::from_millis(50));
-        self.mouse
-            .release(&Keys::LEFT)
+        self.enigo
+            .button(Button::Left, Direction::Release)
             .expect("Unable to release button");
     }
 
-    pub fn cast(&self) {
-        self.mouse
-            .press(&Keys::LEFT)
+    pub fn cast(&mut self) {
+        self.enigo
+            .button(Button::Left, Direction::Press)
             .expect("Unable to press button");
         thread::sleep(Duration::from_millis(50));
-        self.mouse
-            .release(&Keys::LEFT)
+        self.enigo
+            .button(Button::Left, Direction::Release)
             .expect("Unable to release button");
     }
 
     pub fn use_potions(&mut self) {
-        let mut enigo = Enigo::new(&enigo::Settings::default()).unwrap();
-
-        if enigo
-            .key(Key::Unicode('b'), enigo::Direction::Press)
-            .is_ok()
-        {
+        if self.enigo.key(Key::Unicode('b'), Direction::Press).is_ok() {
             self.last_potion_use_time = Some(Instant::now());
             thread::sleep(Duration::from_millis(100));
-            enigo
-                .key(Key::Unicode('b'), enigo::Direction::Release)
+            self.enigo
+                .key(Key::Unicode('b'), Direction::Release)
                 .unwrap_or_else(|_| {
                     error!("Can't release potion button!");
                 })
@@ -61,7 +56,7 @@ impl Controller {
         info!("Used potion!");
     }
 
-    pub fn use_potions_if_necessery(&mut self) {
+    pub fn use_potions_if_necessary(&mut self) {
         if self.last_potion_use_time.is_none()
             || self.last_potion_use_time.unwrap().elapsed()
                 > self.settings.read().unwrap().bot.potion_use_delay

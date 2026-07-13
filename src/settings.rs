@@ -57,7 +57,7 @@ impl Default for MovemapSettings {
             detection_gap_size_precents: 30,
             calibration_time_ms: 7000,
             calibration_multiplier_precents: 60,
-            draw_mask: false
+            draw_mask: false,
         }
     }
 }
@@ -77,12 +77,24 @@ impl Default for SonarSettings {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct AudioSettings {
+    pub min_confidence: u8,
+}
+
+impl Default for AudioSettings {
+    fn default() -> Self {
+        Self { min_confidence: 50 }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Default, Clone, PartialEq)]
 pub struct Settings {
     pub capture: CaptureSettings,
     pub bot: BotSettings,
     pub movemap: MovemapSettings,
     pub sonar: SonarSettings,
+    pub audio: AudioSettings,
 }
 
 impl Settings {
