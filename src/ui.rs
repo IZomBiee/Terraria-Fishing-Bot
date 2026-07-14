@@ -8,7 +8,7 @@ use std::sync::{Arc, RwLock, mpsc::Sender};
 use std::time::{Duration, Instant};
 
 use crate::bot::{self, BotCommand, BotState, DetectionMethod};
-use crate::cursor_capturer::SharedFrame;
+use crate::cursor_capture_server::SharedFrame;
 use crate::settings::Settings;
 use crate::ui_terminal::UiTerminal;
 
@@ -45,6 +45,8 @@ pub fn run(
     terminal: UiTerminal,
     shared_frame: SharedFrame,
     force_draw_frame: SharedFrame,
+    ctx_tx_capturer: Sender<egui::Context>,
+    ctx_tx_bot: Sender<egui::Context>,
 ) -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([900.0, 400.0]),
@@ -57,6 +59,10 @@ pub fn run(
         Box::new(|cc| {
             egui_extras::install_image_loaders(&cc.egui_ctx);
             let local_settings = settings.read().unwrap().clone();
+
+            let _ = ctx_tx_capturer.send(cc.egui_ctx.clone());
+            let _ = ctx_tx_bot.send(cc.egui_ctx.clone());
+
             Ok(Box::new(App {
                 tx,
                 rx,
@@ -420,7 +426,5 @@ impl eframe::App for App {
         });
 
         self.sync_local_settings();
-
-        ctx.request_repaint();
     }
 }

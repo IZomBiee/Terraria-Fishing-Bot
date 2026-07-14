@@ -26,6 +26,7 @@ pub struct BotSettings {
     pub potion_use_delay: Duration,
     pub detection_method: bot::DetectionMethod,
     pub bot_toggle_hotkey: Option<String>,
+    bot_target_fps: u8
 }
 
 impl Default for BotSettings {
@@ -37,6 +38,7 @@ impl Default for BotSettings {
             potion_use_delay: Duration::from_secs(20),
             detection_method: bot::DetectionMethod::MoveMap,
             bot_toggle_hotkey: Some("P".to_owned()),
+            bot_target_fps: 30,
         }
     }
 }
@@ -80,11 +82,17 @@ impl Default for SonarSettings {
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct AudioSettings {
     pub min_confidence: u8,
+    pub sample_rate: u32,
+    pub buffer_duration: Duration,
 }
 
 impl Default for AudioSettings {
     fn default() -> Self {
-        Self { min_confidence: 50 }
+        Self {
+            min_confidence: 50,
+            sample_rate: 22050,
+            buffer_duration: Duration::from_secs(1),
+        }
     }
 }
 

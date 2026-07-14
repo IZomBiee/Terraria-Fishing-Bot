@@ -1,6 +1,6 @@
 use crate::{
-    controller::Controller, cursor_capturer::SharedFrame, opencv,
-    settings::Settings, sonar_detector::SonarDetector, ui::UiSended,
+    controller::Controller, cursor_capture_server::SharedFrame, opencv, settings::Settings,
+    sonar_detector::SonarDetector, ui::UiSended,
 };
 
 use image::{GrayImage, RgbaImage};
@@ -74,8 +74,8 @@ pub struct Bot {
     last_cast_time: Instant,
     calibration_results: Vec<u32>,
     movemap_threshold: Option<u32>,
-    shared_frame_count: Arc<RwLock<u64>>,
-    last_frame_count: u64,
+    egui_ctx: eframe::egui::Context,
+    last_frame_start: Instant,
 }
 
 unsafe impl Send for Bot {}
@@ -88,7 +88,7 @@ impl Bot {
         force_draw_frame: SharedFrame,
         settings: Arc<RwLock<Settings>>,
         sonar_detector: SonarDetector,
-        shared_frame_count: Arc<RwLock<u64>>,
+        egui_ctx: eframe::egui::Context,
     ) -> Bot {
         Bot {
             rx,
@@ -105,13 +105,14 @@ impl Bot {
             last_cast_time: Instant::now(),
             movemap_threshold: None,
             calibration_results: Vec::new(),
-            shared_frame_count,
-            last_frame_count: 0,
+            egui_ctx,
+            last_frame_start: Instant::now(),
         }
     }
 
     pub fn run(&mut self) {
         loop {
+            self.last_frame_start = Instant::now();
             self.handle_commands();
 
             let maybe_img = self
@@ -121,21 +122,32 @@ impl Bot {
                 .and_then(|guard| guard.clone());
 
             if let Some(rgba_img) = maybe_img {
-                let current_frame_count = self.shared_frame_count.read().unwrap().clone();
-
-                let should_update = self.last_frame.as_ref().is_none()
-                    || current_frame_count != self.last_frame_count;
-
-                if should_update {
-                    self.update(rgba_img);
-                    self.update_fps();
-
-                    self.last_frame_count = current_frame_count;
-                }
+                self.update(rgba_img);
+                self.update_fps();
             }
-            thread::sleep(Duration::from_millis(5));
+
+            let detection_method = self.settings.read().unwrap().bot.detection_method.clone();
+            let capture_fps = self.settings.read().unwrap().capture.fps;
+
+            if detection_method == DetectionMethod::Audio {
+                self.manage_sleep(30);
+            } else {
+                self.manage_sleep(capture_fps);
+            }
         }
     }
+
+    fn manage_sleep(&mut self, target_fps: u8) {
+        let target_duration = Duration::from_secs_f32(1.0 / target_fps as f32);
+
+        let elapsed = self.last_frame_start.elapsed();
+
+        if elapsed < target_duration {
+            let sleep_needed = target_duration - elapsed;
+            std::thread::sleep(sleep_needed);
+        }
+    }
+
 
     fn set_state(&mut self, new_state: BotState) {
         self.state = new_state;
@@ -282,20 +294,14 @@ impl Bot {
                     .get_strings_from_frame(opencv::rgba_2_rgb(last_frame));
 
                 if sonar_detection_words.split(",").any(|string| {
-                    SonarDetector::is_needed_string(
-                        string,
-                        &word,
-                        sonar_detection_threshold,
-                    )
+                    SonarDetector::is_needed_string(string, &word, sonar_detection_threshold)
                 }) {
                     let _ = self.tx.send(UiSended::DetectedItem(word));
                     self.set_state(BotState::Catch);
                 }
             }
 
-            DetectionMethod::Audio => {
-                
-            }
+            DetectionMethod::Audio => {}
         }
     }
 
@@ -329,6 +335,12 @@ impl Bot {
 
             if let Ok(mut lock) = self.force_draw_frame.lock() {
                 *lock = Some(rgba_frame);
+                self.egui_ctx.request_repaint();
+            }
+        } else if let Ok(mut lock) = self.force_draw_frame.lock() {
+            if lock.is_some() {
+                *lock = None;
+                self.egui_ctx.request_repaint();
             }
         } else if settings.bot.detection_method == DetectionMethod::Audio {
             if let Ok(mut lock) = self.force_draw_frame.lock() {

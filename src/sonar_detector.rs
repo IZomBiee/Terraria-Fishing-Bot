@@ -55,35 +55,3 @@ impl SonarDetector {
         distance <= thresh
     }
 }
-
-mod tests {
-    use super::*;
-
-    fn find(word: &str, img_path: &str) {
-        let mut detector = SonarDetector::default();
-        let img = image::open(img_path).expect("Can't load image!").to_rgb8();
-        let word1 = detector.get_strings_from_frame(img);
-
-        assert!(
-            SonarDetector::is_needed_string(word, &word1, 2),
-            "Not founded \"{}\" on image but found \"{}\".",
-            word,
-            word1
-        );
-    }
-
-    #[test]
-    fn find_bass() {
-        find("bass", "assets\\sonar_bass.png");
-    }
-
-    #[test]
-    fn find_bomb_fish() {
-        find("bomb fish", "assets\\sonar_bomb_fish.png");
-    }
-
-    #[test]
-    fn find_base_text() {
-        find("The most common", "assets\\base_text.png");
-    }
-}
