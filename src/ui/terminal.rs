@@ -2,12 +2,12 @@ use eframe::egui::Ui;
 use eframe::egui::{self, Color32};
 use std::collections::VecDeque;
 
-pub struct UiTerminal {
+pub struct Terminal {
     history: VecDeque<String>,
     size: usize,
 }
 
-impl UiTerminal {
+impl Terminal {
     pub fn new(size: usize) -> Self {
         Self {
             history: VecDeque::with_capacity(size),

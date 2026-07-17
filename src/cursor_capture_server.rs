@@ -1,7 +1,8 @@
 use crate::settings::Settings;
+use crate::ui::UiSended;
 use enigo::{Enigo, Mouse, Settings as EnigoSettings};
 use image::RgbaImage;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex, RwLock, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 use xcap::Monitor;
@@ -16,6 +17,7 @@ struct CursorLocation {
 }
 
 pub struct CursorCaptureServer {
+    tx: mpsc::Sender<UiSended>,
     settings: Arc<RwLock<Settings>>,
     egui_ctx: eframe::egui::Context,
     output_frame: SharedFrame,
@@ -26,6 +28,7 @@ pub struct CursorCaptureServer {
 
 impl CursorCaptureServer {
     pub fn new(
+        tx: mpsc::Sender<UiSended>,
         settings: Arc<RwLock<Settings>>,
         egui_ctx: eframe::egui::Context,
         output_frame: SharedFrame,
@@ -36,6 +39,7 @@ impl CursorCaptureServer {
         let enigo = Enigo::new(&EnigoSettings::default()).expect("Could not initialize Enigo");
 
         Self {
+            tx,
             settings,
             egui_ctx,
             output_frame,
@@ -93,6 +97,8 @@ impl CursorCaptureServer {
             }
 
             self.manage_sleep(target_fps);
+
+            let _ = self.tx.send(UiSended::SetCaptureFps(1000.0/(self.last_frame_start.elapsed().as_millis() as f32)));
         }
     }
 

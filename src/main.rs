@@ -1,19 +1,16 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-pub mod audio_server;
-pub mod bot;
-pub mod controller;
-pub mod cursor_capture_server;
-pub mod logger;
-pub mod onnx_audio_detector;
-pub mod opencv;
-pub mod settings;
-pub mod sonar_detector;
-pub mod ui;
-pub mod ui_terminal;
+mod audio_server;
+mod bot;
+mod cursor_capture_server;
+mod detectors;
+mod logger;
+mod settings;
+mod ui;
 
 use eframe::egui;
 use image::RgbaImage;
+use log::{error, info};
 use logger::Logger;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex, RwLock};
@@ -30,7 +27,7 @@ fn main() {
     log::set_logger(Box::leak(logger)).unwrap();
     log::set_max_level(log::LevelFilter::Info);
 
-    let terminal = ui_terminal::UiTerminal::new(100);
+    let terminal = ui::Terminal::new(100);
 
     let settings = Arc::new(RwLock::new(settings::Settings::load_from_file(
         "settings.json",
@@ -46,9 +43,14 @@ fn main() {
 
     let (ctx_tx_capturer, ctx_rx_capturer) = std::sync::mpsc::channel::<egui::Context>();
 
+    let (gui_tx, bot_rx) = mpsc::channel::<bot::BotCommand>();
+    let (bot_tx, gui_rx) = mpsc::channel::<ui::UiSended>();
+    let capturer_tx = bot_tx.clone();
+
     std::thread::spawn(move || {
         if let Ok(egui_ctx) = ctx_rx_capturer.recv() {
             let mut capturer = cursor_capture_server::CursorCaptureServer::new(
+                capturer_tx,
                 settings_for_thread,
                 egui_ctx,
                 frame_for_thread,
@@ -57,16 +59,22 @@ fn main() {
         }
     });
 
-    let sonar_detector = sonar_detector::SonarDetector::default();
-
-    let (gui_tx, bot_rx) = mpsc::channel::<bot::BotCommand>();
-    let (bot_tx, gui_rx) = mpsc::channel::<ui::UiSended>();
-
     let bot_frame = shared_frame.clone();
 
     let settings_for_bot = Arc::clone(&settings);
 
     let (ctx_tx_bot, ctx_rx_bot) = std::sync::mpsc::channel::<egui::Context>();
+
+    let movemap_detector = detectors::movemap::Movemap::new(Arc::clone(&settings));
+    let ocr_detector = detectors::ocr::Ocr::default();
+    // let audio_detector =
+    //     detectors::onnx_audio::ONNXAudio::new("assets\\sound_detector.onnx", 22050).unwrap_or_else(
+    //         |err| {
+    //             error!("Failed to initialize ONNX Audio: {}", err);
+    //             panic!("{}", err);
+    //         },
+    //     );
+    let audio_detector: Option<detectors::onnx_audio::ONNXAudio> = None;
 
     std::thread::spawn(move || {
         if let Ok(egui_ctx) = ctx_rx_bot.recv() {
@@ -76,7 +84,9 @@ fn main() {
                 bot_frame,
                 force_draw_bot_frame,
                 settings_for_bot,
-                sonar_detector,
+                ocr_detector,
+                audio_detector,
+                movemap_detector,
                 egui_ctx,
             );
             bot.run();

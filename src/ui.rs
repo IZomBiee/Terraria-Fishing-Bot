@@ -7,16 +7,18 @@ use std::sync::mpsc::Receiver;
 use std::sync::{Arc, RwLock, mpsc::Sender};
 use std::time::{Duration, Instant};
 
+pub mod terminal;
+pub use self::terminal::Terminal;
+
 use crate::bot::{self, BotCommand, BotState, DetectionMethod};
 use crate::cursor_capture_server::SharedFrame;
 use crate::settings::Settings;
-use crate::ui_terminal::UiTerminal;
 
 pub enum UiSended {
-    LiquidGap(u32, u32),
-    DetectedItem(String),
+    LiquidGap(Option<(u32, u32)>),
     ChangeState(BotState),
-    SetFPS(f32),
+    SetBotFps(f32),
+    SetCaptureFps(f32),
 }
 
 struct App {
@@ -24,7 +26,7 @@ struct App {
     rx: Receiver<UiSended>,
     log_rx: Receiver<String>,
     settings: Arc<RwLock<Settings>>,
-    terminal: UiTerminal,
+    terminal: Terminal,
     texture: Option<egui::TextureHandle>,
     shared_frame: SharedFrame,
     force_draw_frame: SharedFrame,
@@ -32,7 +34,8 @@ struct App {
     last_liquid_gap: Option<(u32, u32)>,
     last_state: BotState,
     local_settings: Settings,
-    fps: u64,
+    bot_fps: f32,
+    capture_fps: f32,
     bot_toggle_hotkey_buffer: Vec<Keycode>,
     is_choose_hotkey: bool,
 }
@@ -42,7 +45,7 @@ pub fn run(
     rx: Receiver<UiSended>,
     log_rx: Receiver<String>,
     settings: Arc<RwLock<Settings>>,
-    terminal: UiTerminal,
+    terminal: Terminal,
     shared_frame: SharedFrame,
     force_draw_frame: SharedFrame,
     ctx_tx_capturer: Sender<egui::Context>,
@@ -76,7 +79,8 @@ pub fn run(
                 last_toggle_key_time: None,
                 last_liquid_gap: None,
                 last_state: BotState::Idle,
-                fps: 0,
+                bot_fps: 0.0,
+                capture_fps: 0.0,
                 bot_toggle_hotkey_buffer: Vec::new(),
                 is_choose_hotkey: false,
             }))
@@ -87,7 +91,7 @@ pub fn run(
 impl App {
     fn update_preview(&mut self, ctx: &egui::Context, new_frame: &mut image::RgbaImage) {
         if let Some((y0, y1)) = self.last_liquid_gap
-            && self.settings.read().unwrap().bot.detection_method == DetectionMethod::MoveMap
+            && self.settings.read().unwrap().bot.detection_method == DetectionMethod::Movemap
         {
             let (width, height) = new_frame.dimensions();
 
@@ -116,18 +120,20 @@ impl App {
     fn detection_contents(&mut self, ui: &mut egui::Ui) {
         let detection_method = &mut self.local_settings.bot.detection_method;
 
-        ui.horizontal(|ui| {
-            ui.label("Method");
-            egui::ComboBox::from_id_salt("method_combobox")
-                .selected_text(format!("{:?}", detection_method))
-                .show_ui(ui, |ui| {
-                    ui.selectable_value(detection_method, DetectionMethod::MoveMap, "MoveMap");
-                    ui.selectable_value(detection_method, DetectionMethod::Sonar, "Sonar");
-                });
-        });
+        if self.last_state == BotState::Idle {
+            ui.horizontal(|ui| {
+                ui.label("Method");
+                egui::ComboBox::from_id_salt("method_combobox")
+                    .selected_text(format!("{:?}", detection_method))
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(detection_method, DetectionMethod::Movemap, "MoveMap");
+                        ui.selectable_value(detection_method, DetectionMethod::Ocr, "Sonar");
+                    });
+            });
+        }
 
         match detection_method {
-            DetectionMethod::MoveMap => {
+            DetectionMethod::Movemap => {
                 let settings = &mut self.local_settings.movemap;
 
                 ui.add(
@@ -155,7 +161,7 @@ impl App {
                     ui.checkbox(&mut self.local_settings.movemap.draw_mask, "")
                 });
             }
-            DetectionMethod::Sonar => {
+            DetectionMethod::Ocr => {
                 let settings = &mut self.local_settings.sonar;
 
                 ui.label("Detection Words");
@@ -208,7 +214,8 @@ impl App {
 
     fn information_contents(&mut self, ui: &mut egui::Ui) {
         ui.label(format!("State: {}", self.last_state));
-        ui.label(format!("FPS: {}", self.fps));
+        ui.label(format!("Bot FPS: {:.1}", self.bot_fps));
+        ui.label(format!("Capture FPS: {:.1}", self.capture_fps));
 
         match self.last_state {
             BotState::Idle => {
@@ -323,12 +330,10 @@ impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         if let Ok(recived) = self.rx.try_recv() {
             match recived {
-                UiSended::LiquidGap(y0, y1) => self.last_liquid_gap = Some((y0, y1)),
-                UiSended::DetectedItem(item) => {
-                    info!("Detected word: {}", item);
-                }
+                UiSended::LiquidGap(liquid_gap) => self.last_liquid_gap = liquid_gap,
                 UiSended::ChangeState(state) => self.last_state = state,
-                UiSended::SetFPS(fps) => self.fps = fps as u64,
+                UiSended::SetBotFps(fps) => self.bot_fps = fps,
+                UiSended::SetCaptureFps(fps) => self.capture_fps = fps,
             }
         }
 

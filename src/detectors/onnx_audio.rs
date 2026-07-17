@@ -1,18 +1,17 @@
 use std::collections::VecDeque;
 
 use image::{Rgb, RgbImage};
-use log::info;
 use ort::value::Value;
 use ort::{session::Session, value::TensorValueType};
 use rustfft::{FftPlanner, num_complex::Complex};
 
-pub struct ONNXAudioDetector {
+pub struct ONNXAudio {
     pub sample_rate: u32,
     onnx_session: Session,
 }
 
-impl ONNXAudioDetector {
-    pub fn new(onnx_path: String, sample_rate: u32) -> Result<Self, String> {
+impl ONNXAudio {
+    pub fn new(onnx_path: &str, sample_rate: u32) -> Result<Self, String> {
         let onnx_session = Session::builder()
             .map_err(|e| format!("Failed to build ONNX builder: {}", e))?
             .commit_from_file(onnx_path)
@@ -25,7 +24,7 @@ impl ONNXAudioDetector {
 
     fn prepare_session_inputs(&self, snapshot: &[f32]) -> Option<Value<TensorValueType<f32>>> {
         let mel_spectrogram =
-            ONNXAudioDetector::compute_mel_spectrogram(&snapshot, self.sample_rate as f32);
+            ONNXAudio::compute_mel_spectrogram(&snapshot, self.sample_rate as f32);
 
         Value::from_array(mel_spectrogram).ok()
     }
