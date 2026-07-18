@@ -1,6 +1,5 @@
 use enigo::{Button, Direction, Enigo, Key, Keyboard, Mouse, Settings as EnigoSettings};
 use log::error;
-use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
 

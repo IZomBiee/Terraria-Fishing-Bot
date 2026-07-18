@@ -4,13 +4,13 @@ mod audio_server;
 mod bot;
 mod cursor_capture_server;
 mod detectors;
+mod fps_handler;
 mod logger;
 mod settings;
 mod ui;
 
 use eframe::egui;
 use image::RgbaImage;
-use log::{error, info};
 use logger::Logger;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex, RwLock};

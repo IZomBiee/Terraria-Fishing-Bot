@@ -1,5 +1,4 @@
 use image::{Pixel, RgbImage, RgbaImage};
-use log::info;
 use oar_ocr::domain::tasks::TextDetectionConfig;
 use oar_ocr::prelude::*;
 use regex::Regex;

@@ -1,17 +1,11 @@
 pub mod controller;
 
 use crate::{
-    cursor_capture_server::SharedFrame,
-    detectors::{
-        self,
-        movemap::{LiquidLevelCalibrator, ThresholdCalibrator},
-    },
-    settings::Settings,
-    ui::UiSended,
+    cursor_capture_server::SharedFrame, detectors::{self}, fps_handler::FpsHandler, settings::Settings, ui::UiSended,
 };
 
 use image::{DynamicImage, GrayImage};
-use log::{debug, info};
+use log::info;
 use serde::{Deserialize, Serialize};
 use strum_macros::AsRefStr;
 
@@ -76,6 +70,7 @@ pub struct Bot {
     tx: Sender<UiSended>,
     controller: controller::Controller,
     last_frame_start: Instant,
+    fps_handler: FpsHandler,
     egui_ctx: eframe::egui::Context,
 }
 
@@ -106,16 +101,16 @@ impl Bot {
             audio_detector,
             egui_ctx,
             last_frame_start: Instant::now(),
+            fps_handler: FpsHandler::default(),
         }
     }
 
     pub fn run(&mut self) {
         loop {
             self.last_frame_start = Instant::now();
+
             self.handle_commands();
-
             self.update();
-
             let detection_method = self.settings.read().unwrap().bot.detection_method.clone();
             let capture_fps = self.settings.read().unwrap().capture.fps;
 
@@ -124,10 +119,17 @@ impl Bot {
             } else {
                 self.manage_sleep(capture_fps);
             }
+
+            self.fps_handler.add(self.last_frame_start);
+
+            if let Some(fps) = self.fps_handler.get_avg_fps() {
+                let _ = self.tx.send(UiSended::SetBotFps(fps));
+            }
         }
     }
 
     pub fn start(&mut self) {
+        info!("===== Bot start =====");
         self.movemap_detector.reset();
         if self.settings.read().unwrap().bot.detection_method == DetectionMethod::Movemap {
             self.set_state(BotState::LiquidLevelCalibration(Instant::now()));
@@ -137,6 +139,7 @@ impl Bot {
     }
 
     pub fn stop(&mut self) {
+        info!("===== Bot stop =====");
         self.set_state(BotState::Idle);
         *self.force_draw_frame.lock().unwrap() = None;
         let _ = self.tx.send(UiSended::LiquidGap(None));
@@ -176,9 +179,7 @@ impl Bot {
 
                     let detection_gap = self.movemap_detector.get_liquid_gap().unwrap();
 
-                    let _ = self
-                        .tx
-                        .send(UiSended::LiquidGap(Some(detection_gap)));
+                    let _ = self.tx.send(UiSended::LiquidGap(Some(detection_gap)));
                     self.set_state(BotState::Cast);
                 }
             }
@@ -253,6 +254,7 @@ impl Bot {
             }
             BotState::WaitingForBite(time) => {
                 if time.elapsed() > Duration::from_secs(30) {
+                    info!("Too long ({}s), recast.", time.elapsed().as_secs());
                     self.set_state(BotState::Catch);
                 }
 
@@ -332,10 +334,6 @@ impl Bot {
             let sleep_needed = target_duration - elapsed;
             std::thread::sleep(sleep_needed);
         }
-
-        let _ = self.tx.send(UiSended::SetBotFps(
-            1000.0 / self.last_frame_start.elapsed().as_millis() as f32,
-        ));
     }
 
     fn set_state(&mut self, new_state: BotState) {

@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex, RwLock, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 use xcap::Monitor;
+use crate::fps_handler::{FpsHandler};
 
 pub type SharedFrame = Arc<Mutex<Option<RgbaImage>>>;
 
@@ -23,6 +24,7 @@ pub struct CursorCaptureServer {
     output_frame: SharedFrame,
     monitors: Vec<Monitor>,
     last_frame_start: Instant,
+    fps_handler: FpsHandler,
     enigo: Enigo,
 }
 
@@ -45,6 +47,7 @@ impl CursorCaptureServer {
             output_frame,
             monitors,
             last_frame_start: Instant::now(),
+            fps_handler: FpsHandler::default(),
             enigo,
         }
     }
@@ -98,7 +101,13 @@ impl CursorCaptureServer {
 
             self.manage_sleep(target_fps);
 
-            let _ = self.tx.send(UiSended::SetCaptureFps(1000.0/(self.last_frame_start.elapsed().as_millis() as f32)));
+            self.fps_handler.add(self.last_frame_start);
+
+            if let Some(fps) = self.fps_handler.get_avg_fps() {
+                let _ = self.tx.send(UiSended::SetCaptureFps(
+                    fps
+                ));
+            }
         }
     }
 

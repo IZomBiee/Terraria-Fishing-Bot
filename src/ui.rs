@@ -1,7 +1,6 @@
 use device_query::{DeviceQuery, DeviceState, Keycode};
 use eframe::egui::Vec2;
 use eframe::{egui, egui::panel::*};
-use log::info;
 use std::str::FromStr;
 use std::sync::mpsc::Receiver;
 use std::sync::{Arc, RwLock, mpsc::Sender};
