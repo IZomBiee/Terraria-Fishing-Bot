@@ -1,4 +1,8 @@
 pub mod controller;
+pub mod handlers;
+pub mod types;
+
+use types::{BotCommand, BotState, DetectionMethod};
 
 use crate::{
     cursor_capture_server::SharedFrame, detectors::{self}, fps_handler::FpsHandler, settings::Settings, ui::UiSended,
@@ -6,57 +10,14 @@ use crate::{
 
 use image::{DynamicImage, GrayImage};
 use log::info;
-use serde::{Deserialize, Serialize};
-use strum_macros::AsRefStr;
 
 use std::{
-    fmt::Display,
     sync::{
         Arc, RwLock,
         mpsc::{Receiver, Sender},
     },
     time::{Duration, Instant},
 };
-
-#[derive(Debug, PartialEq, AsRefStr, Clone)]
-pub enum BotState {
-    Idle,
-    LiquidLevelCalibration(Instant),
-    MovemapThresholdCalibration(Instant),
-    WaitingForBite(Instant),
-    Cast,
-    Catch,
-    CastingCooldown(Instant),
-    CatchingCooldown(Instant),
-}
-
-impl Display for BotState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let name = match self {
-            BotState::Idle => "Idle",
-            BotState::LiquidLevelCalibration(..) => "LiquidLevelCalibration",
-            BotState::MovemapThresholdCalibration(..) => "ThresholdCalibration",
-            BotState::WaitingForBite(..) => "WaitingForBite",
-            BotState::Cast => "Cast",
-            BotState::Catch => "Catch",
-            BotState::CastingCooldown(..) => "CastingCooldown",
-            BotState::CatchingCooldown(..) => "CatchingCooldown",
-        };
-        write!(f, "{}", name)
-    }
-}
-
-pub enum BotCommand {
-    Start,
-    Stop,
-}
-
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
-pub enum DetectionMethod {
-    Movemap,
-    Audio,
-    Ocr,
-}
 
 pub struct Bot {
     ocr_detector: detectors::ocr::Ocr,
@@ -148,69 +109,9 @@ impl Bot {
     fn update(&mut self) {
         match self.state {
             BotState::Idle => {}
-            BotState::LiquidLevelCalibration(time) => {
-                let Some(difference_mask) = &self.get_difference_mask() else {
-                    return;
-                };
-
-                self.movemap_detector
-                    .liquid_level_calibrator
-                    .add(difference_mask);
-
-                if time.elapsed()
-                    > Duration::from_millis(
-                        self.settings
-                            .read()
-                            .unwrap()
-                            .movemap
-                            .liquid_detection_delay_ms,
-                    )
-                {
-                    if !self.movemap_detector.set_liquid_level() {
-                        info!("Liquid Calibration Result: Retry");
-                        self.set_state(BotState::LiquidLevelCalibration(Instant::now()));
-                        return;
-                    }
-
-                    info!(
-                        "Liquid Calibration Result: {}",
-                        self.movemap_detector.liquid_level.unwrap()
-                    );
-
-                    let detection_gap = self.movemap_detector.get_liquid_gap().unwrap();
-
-                    let _ = self.tx.send(UiSended::LiquidGap(Some(detection_gap)));
-                    self.set_state(BotState::Cast);
-                }
-            }
-            BotState::MovemapThresholdCalibration(time) => {
-                let Some(difference_mask) = self.get_difference_mask() else {
-                    return;
-                };
-
-                self.movemap_detector.threshold_calibrator.add(
-                    &difference_mask,
-                    self.movemap_detector.get_liquid_gap().unwrap(),
-                );
-
-                if time.elapsed()
-                    > Duration::from_millis(
-                        self.settings.read().unwrap().movemap.calibration_time_ms,
-                    )
-                {
-                    if !self.movemap_detector.set_threshold() {
-                        info!("Threshold Calibration Result: Retry");
-                        self.set_state(BotState::MovemapThresholdCalibration(Instant::now()));
-                        return;
-                    }
-
-                    info!(
-                        "Threshold Calibration Result: {}",
-                        self.movemap_detector.threshold.unwrap()
-                    );
-                    self.set_state(BotState::WaitingForBite(Instant::now()));
-                }
-            }
+            BotState::LiquidLevelCalibration(time) => self.handle_liquid_calibration(time),
+            BotState::MovemapThresholdCalibration(time) => self.handle_threshold_calibration(time),
+            BotState::WaitingForBite(time) => self.handle_waiting_for_bite(time),
             BotState::Cast => {
                 self.controller.cast();
                 self.set_state(BotState::CastingCooldown(Instant::now()));
@@ -221,19 +122,14 @@ impl Bot {
             }
             BotState::CastingCooldown(time) => {
                 if self.settings.read().unwrap().bot.detection_method == DetectionMethod::Movemap {
-                    self.get_difference_mask();
+                    self.get_and_show_difference_mask();
                 }
-
-                if time.elapsed()
-                    > Duration::from_millis(self.settings.read().unwrap().bot.casting_delay_millis)
-                {
+                if time.elapsed() > Duration::from_millis(self.settings.read().unwrap().bot.casting_delay_millis) {
                     if self.settings.read().unwrap().bot.use_potions {
                         self.controller.use_potions();
                     }
-
-                    if self.settings.read().unwrap().bot.detection_method
-                        == DetectionMethod::Movemap
-                        && self.movemap_detector.threshold.is_none()
+                    if self.settings.read().unwrap().bot.detection_method == DetectionMethod::Movemap
+                        && self.movemap_detector.threshold.is_none() 
                     {
                         self.set_state(BotState::MovemapThresholdCalibration(Instant::now()));
                     } else {
@@ -243,75 +139,18 @@ impl Bot {
             }
             BotState::CatchingCooldown(time) => {
                 if self.settings.read().unwrap().bot.detection_method == DetectionMethod::Movemap {
-                    self.get_difference_mask();
+                    self.get_and_show_difference_mask();
                 }
-
-                if time.elapsed()
-                    > Duration::from_millis(self.settings.read().unwrap().bot.catching_delay_millis)
-                {
+                if time.elapsed() > Duration::from_millis(self.settings.read().unwrap().bot.catching_delay_millis) {
                     self.set_state(BotState::Cast);
-                }
-            }
-            BotState::WaitingForBite(time) => {
-                if time.elapsed() > Duration::from_secs(30) {
-                    info!("Too long ({}s), recast.", time.elapsed().as_secs());
-                    self.set_state(BotState::Catch);
-                }
-
-                let detection_method = self.settings.read().unwrap().bot.detection_method.clone();
-
-                match detection_method {
-                    DetectionMethod::Movemap => {
-                        let Some(difference_mask) = self.get_difference_mask() else {
-                            return;
-                        };
-
-                        if self.movemap_detector.is_detected(&difference_mask) {
-                            self.set_state(BotState::Catch);
-                        }
-                    }
-                    DetectionMethod::Ocr => {
-                        let rgb_frame = {
-                            let guard = self.shared_frame.lock().unwrap();
-                            let Some(ref frame) = *guard else {
-                                return;
-                            };
-                            detectors::ocr::rgba_2_rgb(frame)
-                        };
-
-                        let detected_word = self.ocr_detector.get_strings_from_frame(rgb_frame);
-
-                        let (correct_detection_words, threshold) = {
-                            let settings = self.settings.read().unwrap();
-                            (
-                                settings.sonar.sonar_detection_words.clone(),
-                                settings.sonar.sonar_detection_threshold,
-                            )
-                        };
-
-                        if detectors::ocr::Ocr::is_needed_string(
-                            &correct_detection_words,
-                            &detected_word,
-                            threshold,
-                        ) {
-                            info!("Detected Word {}", detected_word);
-                            self.set_state(BotState::Catch);
-                        }
-                    }
-                    DetectionMethod::Audio => {}
                 }
             }
         }
     }
 
-    fn get_difference_mask(&mut self) -> Option<GrayImage> {
-        let Some(frame) = self.shared_frame.lock().unwrap().clone() else {
-            return None;
-        };
-
-        let Some(difference_mask) = self.movemap_detector.get_difference_mask(frame) else {
-            return None;
-        };
+    fn get_and_show_difference_mask(&mut self) -> Option<GrayImage> {
+        let Some(frame) = self.shared_frame.lock().unwrap().clone() else { return None; };
+        let Some(difference_mask) = self.movemap_detector.get_difference_mask(frame) else { return None; };
 
         if self.settings.read().unwrap().movemap.draw_mask {
             let dyn_img = DynamicImage::ImageLuma8(difference_mask.clone());
@@ -321,7 +160,6 @@ impl Bot {
         }
 
         self.egui_ctx.request_repaint();
-
         Some(difference_mask)
     }
 

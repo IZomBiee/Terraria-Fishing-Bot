@@ -43,7 +43,7 @@ fn main() {
 
     let (ctx_tx_capturer, ctx_rx_capturer) = std::sync::mpsc::channel::<egui::Context>();
 
-    let (gui_tx, bot_rx) = mpsc::channel::<bot::BotCommand>();
+    let (gui_tx, bot_rx) = mpsc::channel::<bot::types::BotCommand>();
     let (bot_tx, gui_rx) = mpsc::channel::<ui::UiSended>();
     let capturer_tx = bot_tx.clone();
 

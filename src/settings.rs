@@ -24,7 +24,7 @@ pub struct BotSettings {
     pub catching_delay_millis: u64,
     pub use_potions: bool,
     pub potion_use_delay: Duration,
-    pub detection_method: bot::DetectionMethod,
+    pub detection_method: bot::types::DetectionMethod,
     pub bot_toggle_hotkey: Option<String>,
     bot_target_fps: u8,
 }
@@ -36,7 +36,7 @@ impl Default for BotSettings {
             catching_delay_millis: 300,
             use_potions: false,
             potion_use_delay: Duration::from_secs(20),
-            detection_method: bot::DetectionMethod::Movemap,
+            detection_method: bot::types::DetectionMethod::Movemap,
             bot_toggle_hotkey: Some("P".to_owned()),
             bot_target_fps: 30,
         }

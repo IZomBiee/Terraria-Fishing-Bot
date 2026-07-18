@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 pub mod terminal;
 pub use self::terminal::Terminal;
 
-use crate::bot::{self, BotCommand, BotState, DetectionMethod};
+use crate::bot::types::{DetectionMethod, BotCommand, BotState};
 use crate::cursor_capture_server::SharedFrame;
 use crate::settings::Settings;
 
@@ -40,7 +40,7 @@ struct App {
 }
 
 pub fn run(
-    tx: Sender<bot::BotCommand>,
+    tx: Sender<BotCommand>,
     rx: Receiver<UiSended>,
     log_rx: Receiver<String>,
     settings: Arc<RwLock<Settings>>,
@@ -327,7 +327,7 @@ impl eframe::App for App {
     }
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        if let Ok(recived) = self.rx.try_recv() {
+        while let Ok(recived) = self.rx.try_recv() {
             match recived {
                 UiSended::LiquidGap(liquid_gap) => self.last_liquid_gap = liquid_gap,
                 UiSended::ChangeState(state) => self.last_state = state,
