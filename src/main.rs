@@ -9,7 +9,6 @@ mod logger;
 mod settings;
 mod ui;
 
-use eframe::egui;
 use image::RgbaImage;
 use log::error;
 use logger::Logger;
@@ -42,29 +41,22 @@ fn main() {
     let settings_for_thread = Arc::clone(&settings);
     let frame_for_thread = Arc::clone(&shared_frame);
 
-    let (ctx_tx_capturer, ctx_rx_capturer) = std::sync::mpsc::channel::<egui::Context>();
-
     let (gui_tx, bot_rx) = mpsc::channel::<bot::types::BotCommand>();
     let (bot_tx, gui_rx) = mpsc::channel::<ui::UiSended>();
     let capturer_tx = bot_tx.clone();
 
     std::thread::spawn(move || {
-        if let Ok(egui_ctx) = ctx_rx_capturer.recv() {
-            let mut capturer = cursor_capture_server::CursorCaptureServer::new(
-                capturer_tx,
-                settings_for_thread,
-                egui_ctx,
-                frame_for_thread,
-            );
-            capturer.run();
-        }
+        let mut capturer = cursor_capture_server::CursorCaptureServer::new(
+            capturer_tx,
+            settings_for_thread,
+            frame_for_thread,
+        );
+        capturer.run();
     });
 
     let bot_frame = shared_frame.clone();
 
     let settings_for_bot = Arc::clone(&settings);
-
-    let (ctx_tx_bot, ctx_rx_bot) = std::sync::mpsc::channel::<egui::Context>();
 
     let movemap_detector = detectors::movemap::Movemap::new(Arc::clone(&settings));
     let ocr_detector = detectors::ocr::Ocr::default();
@@ -78,20 +70,17 @@ fn main() {
             });
 
     std::thread::spawn(move || {
-        if let Ok(egui_ctx) = ctx_rx_bot.recv() {
-            let mut bot = bot::Bot::new(
-                bot_rx,
-                bot_tx,
-                bot_frame,
-                force_draw_bot_frame,
-                settings_for_bot,
-                ocr_detector,
-                audio_detector,
-                movemap_detector,
-                egui_ctx,
-            );
-            bot.run();
-        }
+        let mut bot = bot::Bot::new(
+            bot_rx,
+            bot_tx,
+            bot_frame,
+            force_draw_bot_frame,
+            settings_for_bot,
+            ocr_detector,
+            audio_detector,
+            movemap_detector,
+        );
+        bot.run();
     });
 
     let _ = ui::run(
@@ -102,7 +91,5 @@ fn main() {
         terminal,
         Arc::clone(&shared_frame),
         force_draw_ui_frame,
-        ctx_tx_capturer,
-        ctx_tx_bot,
     );
 }

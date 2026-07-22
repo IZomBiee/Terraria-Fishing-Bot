@@ -16,6 +16,8 @@ impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx();
 
+        ctx.request_repaint_after(Duration::from_millis(50));
+
         while let Ok(recived) = self.rx.try_recv() {
             match recived {
                 UiSended::LiquidGap(liquid_gap) => self.last_liquid_gap = liquid_gap,

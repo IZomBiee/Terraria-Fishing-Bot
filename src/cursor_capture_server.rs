@@ -21,7 +21,6 @@ struct CursorLocation {
 pub struct CursorCaptureServer {
     tx: mpsc::Sender<UiSended>,
     settings: Arc<RwLock<Settings>>,
-    egui_ctx: eframe::egui::Context,
     output_frame: SharedFrame,
     monitors: Vec<Monitor>,
     last_frame_start: Instant,
@@ -33,7 +32,6 @@ impl CursorCaptureServer {
     pub fn new(
         tx: mpsc::Sender<UiSended>,
         settings: Arc<RwLock<Settings>>,
-        egui_ctx: eframe::egui::Context,
         output_frame: SharedFrame,
     ) -> Self {
         let mut monitors = Monitor::all().expect("Could not get monitors!");
@@ -44,7 +42,6 @@ impl CursorCaptureServer {
         Self {
             tx,
             settings,
-            egui_ctx,
             output_frame,
             monitors,
             last_frame_start: Instant::now(),
@@ -88,13 +85,7 @@ impl CursorCaptureServer {
 
             let target_fps = self.settings.read().map(|s| s.capture.fps).unwrap_or(30);
 
-            if target_fps == 0 {
-                thread::sleep(Duration::from_millis(100));
-                continue;
-            }
-
-            if self.settings.read().unwrap().bot.detection_method == DetectionMethod::Audio {
-                self.egui_ctx.request_repaint();
+            if target_fps == 0 || self.settings.read().unwrap().bot.detection_method == DetectionMethod::Audio {
                 thread::sleep(Duration::from_millis(100));
                 continue;
             }
@@ -103,7 +94,6 @@ impl CursorCaptureServer {
                 && let Ok(mut lock) = self.output_frame.lock()
             {
                 *lock = Some(frame);
-                self.egui_ctx.request_repaint();
             }
 
             self.manage_sleep(target_fps);

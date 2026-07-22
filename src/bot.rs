@@ -36,7 +36,6 @@ pub struct Bot {
     controller: controller::Controller,
     last_frame_start: Instant,
     fps_handler: FpsHandler,
-    egui_ctx: eframe::egui::Context,
 }
 
 unsafe impl Send for Bot {}
@@ -51,7 +50,6 @@ impl Bot {
         ocr_detector: detectors::ocr::Ocr,
         audio_detector: detectors::onnx_audio::ONNXAudio,
         movemap_detector: detectors::movemap::Movemap,
-        egui_ctx: eframe::egui::Context,
     ) -> Bot {
         Bot {
             rx,
@@ -64,7 +62,6 @@ impl Bot {
             ocr_detector,
             movemap_detector,
             audio_detector,
-            egui_ctx,
             last_frame_start: Instant::now(),
             fps_handler: FpsHandler::default(),
         }
@@ -175,7 +172,6 @@ impl Bot {
             *self.force_draw_frame.lock().unwrap() = None;
         }
 
-        self.egui_ctx.request_repaint();
         Some(difference_mask)
     }
 
