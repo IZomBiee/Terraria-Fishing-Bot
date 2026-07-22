@@ -1,3 +1,5 @@
+use crate::bot::types::DetectionMethod;
+use crate::fps_handler::FpsHandler;
 use crate::settings::Settings;
 use crate::ui::UiSended;
 use enigo::{Enigo, Mouse, Settings as EnigoSettings};
@@ -6,7 +8,6 @@ use std::sync::{Arc, Mutex, RwLock, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 use xcap::Monitor;
-use crate::fps_handler::{FpsHandler};
 
 pub type SharedFrame = Arc<Mutex<Option<RgbaImage>>>;
 
@@ -92,6 +93,12 @@ impl CursorCaptureServer {
                 continue;
             }
 
+            if self.settings.read().unwrap().bot.detection_method == DetectionMethod::Audio {
+                self.egui_ctx.request_repaint();
+                thread::sleep(Duration::from_millis(100));
+                continue;
+            }
+
             if let Some(frame) = self.capture_logic()
                 && let Ok(mut lock) = self.output_frame.lock()
             {
@@ -104,9 +111,7 @@ impl CursorCaptureServer {
             self.fps_handler.add(self.last_frame_start);
 
             if let Some(fps) = self.fps_handler.get_avg_fps() {
-                let _ = self.tx.send(UiSended::SetCaptureFps(
-                    fps
-                ));
+                let _ = self.tx.send(UiSended::SetCaptureFps(fps));
             }
         }
     }

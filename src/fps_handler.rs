@@ -31,8 +31,7 @@ impl FpsHandler {
             return Duration::from_secs(0);
         }
 
-        let buffer_duration = self.frametime_buffer
-            .iter().sum::<Duration>();
+        let buffer_duration = self.frametime_buffer.iter().sum::<Duration>();
 
         buffer_duration
     }
@@ -41,14 +40,13 @@ impl FpsHandler {
         if self.frametime_buffer.is_empty() {
             return None;
         }
-        let fps = self.frametime_buffer
-                .iter()
-                .map(|duration| duration.as_millis() as f32)
-                .sum::<f32>()
-                / (self.frametime_buffer.len() as f32);
+        let fps = self
+            .frametime_buffer
+            .iter()
+            .map(|duration| duration.as_millis() as f32)
+            .sum::<f32>()
+            / (self.frametime_buffer.len() as f32);
 
-        return Some(
-            1000.0/fps
-        );
+        return Some(1000.0 / fps);
     }
 }

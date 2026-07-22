@@ -1,18 +1,21 @@
-use crate::ui::{App, UiSended};
 use crate::bot::types::{BotCommand, BotState};
+use crate::ui::{App, UiSended};
+use device_query::{DeviceQuery, DeviceState};
 use eframe::egui;
 use eframe::egui::Vec2;
-use eframe::egui::panel::{SidePanel, CentralPanel};
-use device_query::{DeviceQuery, DeviceState};
+use eframe::egui::CentralPanel;
+use eframe::egui::panel::Panel;
 use std::time::{Duration, Instant};
 
 impl eframe::App for App {
-    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+    fn on_exit(&mut self) {
         self.terminal.print("Saving data before exit...");
         self.settings.read().unwrap().save_to_file("settings.json");
     }
 
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let ctx = ui.ctx();
+
         while let Ok(recived) = self.rx.try_recv() {
             match recived {
                 UiSended::LiquidGap(liquid_gap) => self.last_liquid_gap = liquid_gap,
@@ -35,49 +38,73 @@ impl eframe::App for App {
                     || self.last_toggle_key_time.unwrap().elapsed() > Duration::from_millis(100)
                 {
                     match self.last_state {
-                        BotState::Idle => { let _ = self.tx.send(BotCommand::Start); }
-                        _ => { let _ = self.tx.send(BotCommand::Stop); }
+                        BotState::Idle => {
+                            let _ = self.tx.send(BotCommand::Start);
+                        }
+                        _ => {
+                            let _ = self.tx.send(BotCommand::Stop);
+                        }
                     }
                 }
                 self.last_toggle_key_time = Some(Instant::now());
             };
         }
 
-        let maybe_img = self.force_draw_frame.lock().ok().and_then(|guard| guard.clone());
+        let maybe_img = self
+            .force_draw_frame
+            .lock()
+            .ok()
+            .and_then(|guard| guard.clone());
 
         if let Some(mut rgba_img) = maybe_img {
             self.update_preview(ctx, &mut rgba_img);
         } else {
-            let maybe_img = self.shared_frame.lock().ok().and_then(|guard| guard.clone());
+            let maybe_img = self
+                .shared_frame
+                .lock()
+                .ok()
+                .and_then(|guard| guard.clone());
             if let Some(mut rgba_img) = maybe_img {
                 self.update_preview(ctx, &mut rgba_img);
             }
         }
 
-        SidePanel::left("left_panel")
+        Panel::left("left_panel")
             .resizable(false)
-            .show(ctx, |ui| {
+            .show(ui, |ui| {
                 ui.vertical_centered(|ui| {
-                    ui.label(egui::RichText::new("General").color(egui::Color32::WHITE).size(18f32));
+                    ui.label(
+                        egui::RichText::new("General")
+                            .color(egui::Color32::WHITE)
+                            .size(18f32),
+                    );
                 });
                 self.general_contents(ui);
 
                 ui.vertical_centered(|ui| {
-                    ui.label(egui::RichText::new("Detection").color(egui::Color32::WHITE).size(18f32));
+                    ui.label(
+                        egui::RichText::new("Detection")
+                            .color(egui::Color32::WHITE)
+                            .size(18f32),
+                    );
                 });
                 self.detection_contents(ui);
 
                 ui.vertical_centered(|ui| {
-                    ui.label(egui::RichText::new("Info").color(egui::Color32::WHITE).size(18f32));
+                    ui.label(
+                        egui::RichText::new("Info")
+                            .color(egui::Color32::WHITE)
+                            .size(18f32),
+                    );
                 });
                 self.information_contents(ui);
             });
 
-        SidePanel::right("right_panel").show(ctx, |ui| {
+        Panel::right("right_panel").show(ui, |ui| {
             self.terminal.show(ui);
         });
 
-        CentralPanel::default().show(ctx, |ui| {
+        CentralPanel::default().show(ui, |ui| {
             if let Some(texture) = &self.texture {
                 ui.add(
                     egui::Image::from_texture(texture)

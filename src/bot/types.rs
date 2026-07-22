@@ -1,6 +1,6 @@
-use std::time::Instant;
-use std::fmt::Display;
 use serde::{Deserialize, Serialize};
+use std::fmt::Display;
+use std::time::Instant;
 use strum_macros::AsRefStr;
 
 #[derive(Debug, PartialEq, AsRefStr, Clone)]

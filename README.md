@@ -4,38 +4,53 @@ Terraria advanced fishing bot, written entirely in Rust. Created for practicing/
 
 ## Features
 
-- [x] Reliable fishing in water/lava/honey
-- [ ] Reliable fishing with noise like enemies
-- [x] Gui
-- [x] Automatic potion use
-- [ ] Fast unload to nearbay chests
-- [ ] Handle events (Bloodmon, Invesions)
-- [x] Working with sonar potion
-- [x] Saving settings
+- Reliable fishing in water/lava/honey
+- 3 detection methods:
+  - Audio (ONNX Neural Network model)
+  - OCR (Text detection)
+  - Movemap (Pixel movement tracking)
+- Reliable fishing with noise like enemies
+- GUI interface
+- Automatic potion use
+- Working with sonar potion
+- Saving settings
+- [ ] Fast unload to nearby chests
+- [ ] Handle events (Blood Moon, Invasions)
 
 ## Preview
+
+### Audio method
+
+![Audio method preview](assets/audio_preview.png)
+
+### OCR method
+
+![OCR method preview](assets/ocr_preview.gif)
 
 ### Movemap method
 
 ![Movemap method preview](assets/movemap_preview.gif)
 
-### Sonar method
-
-![Sonar method preview](assets/sonar_preview.gif)
-
 ## Manual
 
-1. Install zip file from releases tab in this repository.
-2. Unzip it in any directory, like desktop.
-3. Run .exe.
-4. Setup settings in gui.
-5. Setup cursor just slightly below where you want to fish.
-6. Press P to start/stop and don't move both cursor and your character.
+1. Download the executable file from the releases tab in this repository.
+3. Run the executable file.
+4. Configure settings in the GUI and select your preferred detection method.
+5. Set your cursor slightly below where you want to fish.
+6. Press P to start/stop. Do not move the cursor or your character while active.
 
-# Things to Know
+## Things to Know
 
-- The bot `WILL NOT WORK` in movemap mode if you do not have waves enabled.
-- Bot tracking area around cursor.
-- The bot may not work properly in hell due to distortion. It is better to set a contrasting background.
-- During heavy rain, false alarms sometimes occur. It is better to put up a roof.
-- While fishing in lava, it is recommended to increase the gap size, threshold, and noise delay in movemap mode due to lava bubbles.
+### General
+- The bot tracks the area around your cursor.
+- The sound capture from the entire computer, not just the game.
+
+### OCR Method
+- Requires Sonar Potions to detect fish text overlays.
+- It works inconsistently because it uses a generic model. In the future, there will be a specialized one that will work better.
+
+### Movemap Method
+- The bot WILL NOT WORK in movemap mode if you do not have waves enabled in Terraria settings.
+- The bot may not work properly in the Underworld due to heat distortion. Setting a contrasting background can help.
+- During heavy rain, false alarms may occur. Building a roof overhead prevents this.
+- While fishing in lava, increase the gap size, threshold, and noise delay settings to account for lava bubbles.

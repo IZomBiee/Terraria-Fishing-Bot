@@ -4,3 +4,7 @@
 *.json
 __pycache__
 .venv
+*.onnx
+model_training/dataset
+.vscode
+*.onnx.data

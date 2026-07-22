@@ -5,7 +5,11 @@ pub mod types;
 use types::{BotCommand, BotState, DetectionMethod};
 
 use crate::{
-    cursor_capture_server::SharedFrame, detectors::{self}, fps_handler::FpsHandler, settings::Settings, ui::UiSended,
+    cursor_capture_server::SharedFrame,
+    detectors::{self},
+    fps_handler::FpsHandler,
+    settings::Settings,
+    ui::UiSended,
 };
 
 use image::{DynamicImage, GrayImage};
@@ -21,7 +25,7 @@ use std::{
 
 pub struct Bot {
     ocr_detector: detectors::ocr::Ocr,
-    audio_detector: Option<detectors::onnx_audio::ONNXAudio>,
+    audio_detector: detectors::onnx_audio::ONNXAudio,
     movemap_detector: detectors::movemap::Movemap,
     shared_frame: SharedFrame,
     force_draw_frame: SharedFrame,
@@ -45,7 +49,7 @@ impl Bot {
         force_draw_frame: SharedFrame,
         settings: Arc<RwLock<Settings>>,
         ocr_detector: detectors::ocr::Ocr,
-        audio_detector: Option<detectors::onnx_audio::ONNXAudio>,
+        audio_detector: detectors::onnx_audio::ONNXAudio,
         movemap_detector: detectors::movemap::Movemap,
         egui_ctx: eframe::egui::Context,
     ) -> Bot {
@@ -76,9 +80,12 @@ impl Bot {
             let capture_fps = self.settings.read().unwrap().capture.fps;
 
             if detection_method == DetectionMethod::Audio {
+                *self.force_draw_frame.lock().unwrap() =
+                    self.audio_detector.render_waveform(600, 600);
                 self.manage_sleep(30);
             } else {
                 self.manage_sleep(capture_fps);
+                *self.force_draw_frame.lock().unwrap() = None;
             }
 
             self.fps_handler.add(self.last_frame_start);
@@ -124,12 +131,15 @@ impl Bot {
                 if self.settings.read().unwrap().bot.detection_method == DetectionMethod::Movemap {
                     self.get_and_show_difference_mask();
                 }
-                if time.elapsed() > Duration::from_millis(self.settings.read().unwrap().bot.casting_delay_millis) {
+                if time.elapsed()
+                    > Duration::from_millis(self.settings.read().unwrap().bot.casting_delay_millis)
+                {
                     if self.settings.read().unwrap().bot.use_potions {
                         self.controller.use_potions();
                     }
-                    if self.settings.read().unwrap().bot.detection_method == DetectionMethod::Movemap
-                        && self.movemap_detector.threshold.is_none() 
+                    if self.settings.read().unwrap().bot.detection_method
+                        == DetectionMethod::Movemap
+                        && self.movemap_detector.threshold.is_none()
                     {
                         self.set_state(BotState::MovemapThresholdCalibration(Instant::now()));
                     } else {
@@ -141,7 +151,9 @@ impl Bot {
                 if self.settings.read().unwrap().bot.detection_method == DetectionMethod::Movemap {
                     self.get_and_show_difference_mask();
                 }
-                if time.elapsed() > Duration::from_millis(self.settings.read().unwrap().bot.catching_delay_millis) {
+                if time.elapsed()
+                    > Duration::from_millis(self.settings.read().unwrap().bot.catching_delay_millis)
+                {
                     self.set_state(BotState::Cast);
                 }
             }
@@ -149,8 +161,12 @@ impl Bot {
     }
 
     fn get_and_show_difference_mask(&mut self) -> Option<GrayImage> {
-        let Some(frame) = self.shared_frame.lock().unwrap().clone() else { return None; };
-        let Some(difference_mask) = self.movemap_detector.get_difference_mask(frame) else { return None; };
+        let Some(frame) = self.shared_frame.lock().unwrap().clone() else {
+            return None;
+        };
+        let Some(difference_mask) = self.movemap_detector.get_difference_mask(frame) else {
+            return None;
+        };
 
         if self.settings.read().unwrap().movemap.draw_mask {
             let dyn_img = DynamicImage::ImageLuma8(difference_mask.clone());

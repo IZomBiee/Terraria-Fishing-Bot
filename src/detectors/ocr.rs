@@ -4,6 +4,10 @@ use oar_ocr::prelude::*;
 use regex::Regex;
 use strsim::levenshtein;
 
+static DET_MODEL_BYTES: &[u8] = include_bytes!("../../assets/PP-OCRv6_small_det.onnx");
+static REC_MODEL_BYTES: &[u8] = include_bytes!("../../assets/PP-OCRv6_small_rec.onnx");
+static KEYS_STR: &str = include_str!("../../assets/ppocr_keys.txt");
+
 pub struct Ocr {
     engine: OAROCR,
 }
@@ -11,10 +15,11 @@ pub struct Ocr {
 impl Default for Ocr {
     fn default() -> Self {
         let engine = OAROCRBuilder::new(
-            "assets/PP-OCRv6_small_det.onnx",
-            "assets/PP-OCRv6_small_rec.onnx",
-            "assets/ppocr_keys.txt",
+            DET_MODEL_BYTES,
+            REC_MODEL_BYTES,
+            "",
         )
+        .character_dict_content(KEYS_STR)
         .text_detection_config(TextDetectionConfig {
             score_threshold: 0.2,
             box_threshold: 0.45,
@@ -41,7 +46,7 @@ impl Ocr {
             frame_result
                 .text_regions
                 .iter()
-                .filter_map(|region| region.text_with_confidence()) // Grabs (String, f32)
+                .filter_map(|region| region.text_with_confidence())
                 .map(|(text, _confidence)| Ocr::clean_ocr_text(&text).trim().to_owned())
                 .filter(|string| !string.is_empty())
                 .collect()

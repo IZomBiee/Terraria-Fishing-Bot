@@ -1,21 +1,17 @@
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use std::collections::VecDeque;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
-use crate::settings::Settings;
-
-struct AudioServer {
-    settings: Arc<RwLock<Settings>>,
-    max_samples: usize,
-    ring_buffer: Arc<Mutex<VecDeque<f32>>>,
-    stream: cpal::Stream,
+pub struct AudioServer {
+    _stream: cpal::Stream,
+    ring_buffer: Arc<Mutex<VecDeque<f32>>>
 }
 
 impl AudioServer {
-    pub fn new(settings: Arc<RwLock<Settings>>) -> Result<Self, String> {
+    pub fn new(ring_buffer_duration: Duration, sample_rate: u128) -> Result<Self, String> {
         let max_samples = {
-            let settings = &settings.read().unwrap().audio;
-            ((settings.sample_rate as u128 * settings.buffer_duration.as_millis()) / 1000) as usize
+            ((sample_rate * ring_buffer_duration.as_millis()) / 1000) as usize
         };
 
         let ring_buffer = Arc::new(Mutex::new(VecDeque::with_capacity(max_samples)));
@@ -34,7 +30,7 @@ impl AudioServer {
         let native_sample_rate = native_format.sample_rate as f32;
         let native_channels = native_format.channels as usize;
 
-        let target_sample_rate = settings.read().unwrap().audio.sample_rate;
+        let target_sample_rate = sample_rate as f32;
 
         let stream = device
             .build_input_stream(
@@ -44,7 +40,6 @@ impl AudioServer {
 
                     for frame in data.chunks(native_channels) {
                         let mono_sample: f32 = frame.iter().sum::<f32>() / native_channels as f32;
-
                         static mut ACCUMULATOR: f32 = 0.0;
                         unsafe {
                             ACCUMULATOR += target_sample_rate as f32;
@@ -69,10 +64,8 @@ impl AudioServer {
             .map_err(|e| format!("Failed to start audio stream: {}", e))?;
 
         Ok(Self {
-            settings,
-            max_samples,
-            ring_buffer,
-            stream,
+            _stream: stream,
+            ring_buffer
         })
     }
 

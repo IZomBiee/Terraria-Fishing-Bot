@@ -65,12 +65,12 @@ impl Default for MovemapSettings {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
-pub struct SonarSettings {
+pub struct OcrSettings {
     pub sonar_detection_threshold: usize,
     pub sonar_detection_words: String,
 }
 
-impl Default for SonarSettings {
+impl Default for OcrSettings {
     fn default() -> Self {
         Self {
             sonar_detection_threshold: 4,
@@ -82,16 +82,12 @@ impl Default for SonarSettings {
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct AudioSettings {
     pub min_confidence: u8,
-    pub sample_rate: u32,
-    pub buffer_duration: Duration,
 }
 
 impl Default for AudioSettings {
     fn default() -> Self {
         Self {
             min_confidence: 50,
-            sample_rate: 22050,
-            buffer_duration: Duration::from_secs(1),
         }
     }
 }
@@ -101,7 +97,7 @@ pub struct Settings {
     pub capture: CaptureSettings,
     pub bot: BotSettings,
     pub movemap: MovemapSettings,
-    pub sonar: SonarSettings,
+    pub ocr: OcrSettings,
     pub audio: AudioSettings,
 }
 

@@ -11,10 +11,11 @@ mod ui;
 
 use eframe::egui;
 use image::RgbaImage;
+use log::error;
 use logger::Logger;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex, RwLock};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 fn main() {
     let (log_tx, log_rx) = mpsc::channel();
@@ -67,14 +68,14 @@ fn main() {
 
     let movemap_detector = detectors::movemap::Movemap::new(Arc::clone(&settings));
     let ocr_detector = detectors::ocr::Ocr::default();
-    // let audio_detector =
-    //     detectors::onnx_audio::ONNXAudio::new("assets\\sound_detector.onnx", 22050).unwrap_or_else(
-    //         |err| {
-    //             error!("Failed to initialize ONNX Audio: {}", err);
-    //             panic!("{}", err);
-    //         },
-    //     );
-    let audio_detector: Option<detectors::onnx_audio::ONNXAudio> = None;
+    let audio_server = audio_server::AudioServer::new(Duration::from_millis(700), 22050)
+        .unwrap_or_else(|err| panic!("{}", err));
+    let audio_detector =
+        detectors::onnx_audio::ONNXAudio::new(audio_server, 22050)
+            .unwrap_or_else(|err| {
+                error!("Failed to initialize ONNX Audio: {}", err);
+                panic!("{}", err);
+            });
 
     std::thread::spawn(move || {
         if let Ok(egui_ctx) = ctx_rx_bot.recv() {

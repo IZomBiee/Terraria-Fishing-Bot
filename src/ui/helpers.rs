@@ -1,7 +1,7 @@
-use crate::ui::App;
 use crate::bot::types::DetectionMethod;
-use eframe::egui;
+use crate::ui::App;
 use device_query::Keycode;
+use eframe::egui;
 use std::str::FromStr;
 
 impl App {
@@ -26,7 +26,8 @@ impl App {
         if let Some(handle) = &mut self.texture {
             handle.set(color_image, egui::TextureOptions::LINEAR);
         } else {
-            self.texture = Some(ctx.load_texture("screen-capture", color_image, Default::default()));
+            self.texture =
+                Some(ctx.load_texture("screen-capture", color_image, Default::default()));
         }
     }
 

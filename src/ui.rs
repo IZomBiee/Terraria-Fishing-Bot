@@ -1,7 +1,10 @@
-use std::sync::{Arc, RwLock, mpsc::{Receiver, Sender}};
-use std::time::Instant;
-use eframe::egui;
 use device_query::Keycode;
+use eframe::egui;
+use std::sync::{
+    Arc, RwLock,
+    mpsc::{Receiver, Sender},
+};
+use std::time::Instant;
 
 pub mod terminal;
 pub use self::terminal::Terminal;
@@ -10,7 +13,7 @@ mod app_impl;
 mod components;
 mod helpers;
 
-use crate::bot::types::{DetectionMethod, BotCommand, BotState};
+use crate::bot::types::{BotCommand, BotState};
 use crate::cursor_capture_server::SharedFrame;
 use crate::settings::Settings;
 
@@ -67,11 +70,22 @@ pub fn run(
             let _ = ctx_tx_bot.send(cc.egui_ctx.clone());
 
             Ok(Box::new(App {
-                tx, rx, log_rx, settings, local_settings, terminal,
-                texture: None, shared_frame, force_draw_frame,
-                last_toggle_key_time: None, last_liquid_gap: None,
-                last_state: BotState::Idle, bot_fps: 0.0, capture_fps: 0.0,
-                bot_toggle_hotkey_buffer: Vec::new(), is_choose_hotkey: false,
+                tx,
+                rx,
+                log_rx,
+                settings,
+                local_settings,
+                terminal,
+                texture: None,
+                shared_frame,
+                force_draw_frame,
+                last_toggle_key_time: None,
+                last_liquid_gap: None,
+                last_state: BotState::Idle,
+                bot_fps: 0.0,
+                capture_fps: 0.0,
+                bot_toggle_hotkey_buffer: Vec::new(),
+                is_choose_hotkey: false,
             }))
         }),
     )
