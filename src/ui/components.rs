@@ -27,7 +27,7 @@ impl App {
 
                 ui.add(
                     egui::Slider::new(&mut settings.margin, 10..=300)
-                        .text("Detection Area"),
+                        .text("Detection Area (px)"),
                 );
                 ui.add(egui::Slider::new(&mut settings.fps, 5..=60).text("Framerate"));
 
@@ -57,7 +57,7 @@ impl App {
 
                 ui.add(
                     egui::Slider::new(&mut settings.margin, 100..=500)
-                        .text("Detection Area"),
+                        .text("Detection Area (px)"),
                 );
                 ui.add(egui::Slider::new(&mut settings.fps, 3..=20).text("Framerate"));
 
@@ -66,14 +66,14 @@ impl App {
                     .hint_text("Write all items you want to catch and separate by comma(,). Like create, bomb.")
                     .show(ui);
                 ui.add(
-                    egui::Slider::new(&mut settings.sonar_detection_threshold, 0..=10)
-                        .text("Threshold"),
+                    egui::Slider::new(&mut settings.sonar_detection_threshold, 0..=7)
+                        .text("Threshold (simbol count)"),
                 );
             }
             DetectionMethod::Audio => {
                 let settings = &mut self.local_settings.audio;
                 ui.add(
-                    egui::Slider::new(&mut settings.min_confidence, 0..=100).text("Min Confidence"),
+                    egui::Slider::new(&mut settings.min_confidence, 0..=100).text("Min Confidence (%)"),
                 );
             }
         };
@@ -85,14 +85,14 @@ impl App {
                 &mut self.local_settings.bot.casting_delay_millis,
                 300..=1500,
             )
-            .text("Casting Delay"),
+            .text("Casting Delay (ms)"),
         );
         ui.add(
             egui::Slider::new(
                 &mut self.local_settings.bot.catching_delay_millis,
                 100..=1000,
             )
-            .text("Catching Delay"),
+            .text("Catching Delay (ms)"),
         );
         ui.horizontal(|ui| {
             ui.label("Use Potions");

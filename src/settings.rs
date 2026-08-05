@@ -59,11 +59,11 @@ impl Default for MovemapSettings {
         Self {
             liquid_detection_delay_ms: 1000,
             detection_gap_size_precents: 30,
-            calibration_time_ms: 7000,
-            calibration_multiplier_precents: 60,
+            calibration_time_ms: 5000,
+            calibration_multiplier_precents: 70,
             draw_mask: false,
-            fps: 30,
-            margin: 100,
+            fps: 20,
+            margin: 120,
         }
     }
 }
@@ -95,7 +95,7 @@ pub struct AudioSettings {
 impl Default for AudioSettings {
     fn default() -> Self {
         Self {
-            min_confidence: 50,
+            min_confidence: 85,
         }
     }
 }

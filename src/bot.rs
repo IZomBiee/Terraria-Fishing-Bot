@@ -84,7 +84,9 @@ impl Bot {
                 self.manage_sleep(30);
             } else {
                 self.manage_sleep(capture_fps);
-                *self.force_draw_frame.lock().unwrap() = None;
+                if !self.settings.read().unwrap().movemap.draw_mask {
+                    *self.force_draw_frame.lock().unwrap() = None;
+                }
             }
 
             self.fps_handler.add(self.last_frame_start);
