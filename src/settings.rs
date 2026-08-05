@@ -50,6 +50,8 @@ pub struct MovemapSettings {
     pub calibration_time_ms: u64,
     pub calibration_multiplier_precents: u8,
     pub draw_mask: bool,
+    pub fps: u8,
+    pub margin: u32,
 }
 
 impl Default for MovemapSettings {
@@ -60,6 +62,8 @@ impl Default for MovemapSettings {
             calibration_time_ms: 7000,
             calibration_multiplier_precents: 60,
             draw_mask: false,
+            fps: 30,
+            margin: 100,
         }
     }
 }
@@ -68,6 +72,8 @@ impl Default for MovemapSettings {
 pub struct OcrSettings {
     pub sonar_detection_threshold: usize,
     pub sonar_detection_words: String,
+    pub fps: u8,
+    pub margin: u32,
 }
 
 impl Default for OcrSettings {
@@ -75,6 +81,8 @@ impl Default for OcrSettings {
         Self {
             sonar_detection_threshold: 4,
             sonar_detection_words: String::new(),
+            fps: 10,
+            margin: 300,
         }
     }
 }

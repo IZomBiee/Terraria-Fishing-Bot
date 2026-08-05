@@ -5,6 +5,6 @@
 __pycache__
 .venv
 *.onnx
-model_training/dataset
+*dataset
 .vscode
 *.onnx.data

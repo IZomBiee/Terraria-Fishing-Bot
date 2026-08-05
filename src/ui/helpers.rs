@@ -33,6 +33,18 @@ impl App {
 
     pub(crate) fn sync_local_settings(&mut self) {
         if self.local_settings != *self.settings.read().unwrap() {
+            match self.local_settings.bot.detection_method {
+                DetectionMethod::Movemap => {
+                    self.local_settings.capture.fps = self.local_settings.movemap.fps;
+                    self.local_settings.capture.margin = self.local_settings.movemap.margin;
+                }
+                DetectionMethod::Ocr => {
+                    self.local_settings.capture.fps = self.local_settings.ocr.fps;
+                    self.local_settings.capture.margin = self.local_settings.ocr.margin;
+                }
+                DetectionMethod::Audio => {}
+            }
+
             *self.settings.write().unwrap() = self.local_settings.clone();
         }
     }

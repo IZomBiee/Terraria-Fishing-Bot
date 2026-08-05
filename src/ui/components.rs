@@ -24,6 +24,13 @@ impl App {
         match detection_method {
             DetectionMethod::Movemap => {
                 let settings = &mut self.local_settings.movemap;
+
+                ui.add(
+                    egui::Slider::new(&mut settings.margin, 10..=300)
+                        .text("Detection Area"),
+                );
+                ui.add(egui::Slider::new(&mut settings.fps, 5..=60).text("Framerate"));
+
                 ui.add(
                     egui::Slider::new(&mut settings.liquid_detection_delay_ms, 500..=5000)
                         .text("Liquid Detection Delay (ms)"),
@@ -47,6 +54,13 @@ impl App {
             }
             DetectionMethod::Ocr => {
                 let settings = &mut self.local_settings.ocr;
+
+                ui.add(
+                    egui::Slider::new(&mut settings.margin, 100..=500)
+                        .text("Detection Area"),
+                );
+                ui.add(egui::Slider::new(&mut settings.fps, 3..=20).text("Framerate"));
+
                 ui.label("Detection Words");
                 egui::TextEdit::multiline(&mut settings.sonar_detection_words)
                     .hint_text("Write all items you want to catch and separate by comma(,). Like create, bomb.")
@@ -66,11 +80,6 @@ impl App {
     }
 
     pub(crate) fn general_contents(&mut self, ui: &mut egui::Ui) {
-        ui.add(
-            egui::Slider::new(&mut self.local_settings.capture.margin, 10..=300)
-                .text("Detection Area"),
-        );
-        ui.add(egui::Slider::new(&mut self.local_settings.capture.fps, 5..=60).text("Framerate"));
         ui.add(
             egui::Slider::new(
                 &mut self.local_settings.bot.casting_delay_millis,

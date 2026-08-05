@@ -87,6 +87,7 @@ impl CursorCaptureServer {
 
             if target_fps == 0 || self.settings.read().unwrap().bot.detection_method == DetectionMethod::Audio {
                 thread::sleep(Duration::from_millis(100));
+                let _ = self.tx.send(UiSended::SetCaptureFps(0.0));
                 continue;
             }
 
