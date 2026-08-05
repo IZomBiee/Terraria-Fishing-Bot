@@ -77,8 +77,10 @@ impl Bot {
             let capture_fps = self.settings.read().unwrap().capture.fps;
 
             if detection_method == DetectionMethod::Audio {
-                *self.force_draw_frame.lock().unwrap() =
-                    self.audio_detector.render_waveform(600, 600);
+                let waveform_image = self.audio_detector.render_waveform(600, 600);
+                if waveform_image.is_some() {
+                    *self.force_draw_frame.lock().unwrap() = waveform_image;
+                }
                 self.manage_sleep(30);
             } else {
                 self.manage_sleep(capture_fps);
