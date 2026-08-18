@@ -8,13 +8,14 @@ use crate::audio_server::AudioServer;
 
 static MODEL_BYTES: &[u8] = include_bytes!("../../assets/sound_detector.onnx");
 
-pub struct ONNXAudio {
+pub struct OnnxAudio {
     pub sample_rate: u32,
+    pub last_confidence_level: f32,
     audio_server: AudioServer,
     onnx_session: Session,
 }
 
-impl ONNXAudio {
+impl OnnxAudio {
     pub fn new(
         audio_server: AudioServer,
         sample_rate: u32,
@@ -25,6 +26,7 @@ impl ONNXAudio {
             .map_err(|e| format!("Failed to load sound_detector.onnx model: {}", e))?;
         return Ok(Self {
             onnx_session,
+            last_confidence_level: 0.0,
             audio_server,
             sample_rate,
         });
@@ -32,7 +34,7 @@ impl ONNXAudio {
 
     fn prepare_session_inputs(&self, snapshot: &[f32]) -> Option<Value<TensorValueType<f32>>> {
         let mel_spectrogram =
-            ONNXAudio::compute_mel_spectrogram(&snapshot, self.sample_rate as f32);
+            OnnxAudio::compute_mel_spectrogram(&snapshot, self.sample_rate as f32);
 
         Value::from_array(mel_spectrogram).ok()
     }
@@ -40,25 +42,29 @@ impl ONNXAudio {
     fn get_output_tensor(
         &mut self,
         input_tensor: Value<TensorValueType<f32>>,
-    ) -> ort::value::Value {
+    ) -> Option<ort::value::Value> {
         let session_inputs = ort::inputs![input_tensor];
 
-        let mut session_output = self.onnx_session.run(session_inputs).unwrap();
+        let mut session_output = self.onnx_session.run(session_inputs).ok()?;
 
-        session_output.remove("output").unwrap()
+        session_output.remove("output")
     }
 
-    pub fn inference(&mut self) -> Option<f32> {
+    pub fn update(&mut self) {
         let Some(mut snapshot) = self.audio_server.get_buffer() else {
-            return None;
+            return;
         };
 
-        let input_tensor = self.prepare_session_inputs(&snapshot.make_contiguous())?;
+        let input_tensor = self.prepare_session_inputs(&snapshot.make_contiguous()).unwrap();
 
-        let output_tensor = self.get_output_tensor(input_tensor);
+        let Some(output_tensor) = self.get_output_tensor(input_tensor) else {
+            self.last_confidence_level = 0.0;
+            return;
+        };
 
-        let data_slice = output_tensor.try_extract_tensor::<f32>().ok()?.1;
-        data_slice.get(0).copied()
+        let data_slice = output_tensor.try_extract_tensor::<f32>().unwrap().1;
+
+        self.last_confidence_level = data_slice.get(0).copied().unwrap_or(0.0);
     }
 
     pub fn render_waveform(&self, width: u32, height: u32) -> Option<RgbaImage> {

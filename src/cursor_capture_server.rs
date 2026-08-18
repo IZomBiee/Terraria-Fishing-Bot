@@ -80,7 +80,10 @@ impl CursorCaptureServer {
     }
 
     pub fn run(&mut self) {
+        let mut counter = 0;
+        let mut last_time = Instant::now();
         loop {
+            counter += 1;
             self.last_frame_start = Instant::now();
 
             let target_fps = self.settings.read().map(|s| s.capture.fps).unwrap_or(30);
@@ -93,7 +96,11 @@ impl CursorCaptureServer {
 
             if let Some(frame) = self.capture_logic()
                 && let Ok(mut lock) = self.output_frame.lock()
-            {
+            {   
+                if last_time.elapsed() > Duration::from_secs(1) {
+                    let _ = frame.save(format!("C:\\Users\\patri\\Desktop\\Bobbers\\{}.png", counter));
+                    last_time = Instant::now();
+                }
                 *lock = Some(frame);
             }
 

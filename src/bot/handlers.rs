@@ -1,11 +1,10 @@
 use crate::bot::{Bot, BotState, DetectionMethod};
-use crate::detectors;
 use log::info;
 use std::time::{Duration, Instant};
 
 impl Bot {
     pub(crate) fn handle_liquid_calibration(&mut self, time: Instant) {
-        let Some(difference_mask) = &self.get_and_show_difference_mask() else {
+        let Some(difference_mask) = &self.movemap_detector.last_difference_mask else {
             return;
         };
         self.movemap_detector
@@ -30,16 +29,13 @@ impl Bot {
                 "Liquid Calibration Result: {}",
                 self.movemap_detector.liquid_level.unwrap()
             );
-            let detection_gap = self.movemap_detector.get_liquid_gap().unwrap();
-            let _ = self
-                .tx
-                .send(crate::ui::UiSended::LiquidGap(Some(detection_gap)));
+
             self.set_state(BotState::Cast);
         }
     }
 
     pub(crate) fn handle_threshold_calibration(&mut self, time: Instant) {
-        let Some(difference_mask) = self.get_and_show_difference_mask() else {
+        let Some(difference_mask) = &self.movemap_detector.last_difference_mask else {
             return;
         };
         self.movemap_detector.threshold_calibrator.add(
@@ -73,22 +69,11 @@ impl Bot {
         let detection_method = self.settings.read().unwrap().bot.detection_method.clone();
         match detection_method {
             DetectionMethod::Movemap => {
-                if let Some(difference_mask) = self.get_and_show_difference_mask() {
-                    if self.movemap_detector.is_detected(&difference_mask) {
-                        self.set_state(BotState::Catch);
-                    }
+                if self.movemap_detector.is_detected() {
+                    self.set_state(BotState::Catch);
                 }
             }
             DetectionMethod::Ocr => {
-                let rgb_frame = {
-                    let guard = self.shared_frame.lock().unwrap();
-                    let Some(ref frame) = *guard else {
-                        return;
-                    };
-                    detectors::ocr::rgba_2_rgb(frame)
-                };
-
-                let detected_word = self.ocr_detector.get_strings_from_frame(rgb_frame);
                 let (correct_detection_words, threshold) = {
                     let settings = self.settings.read().unwrap();
                     (
@@ -97,17 +82,16 @@ impl Bot {
                     )
                 };
 
-                if detectors::ocr::Ocr::is_needed_string(
+                if self.ocr_detector.is_needed_string(
                     &correct_detection_words,
-                    &detected_word,
                     threshold,
                 ) {
-                    info!("Detected Word {}", detected_word);
+                    info!("Detected Word {}", self.ocr_detector.last_detected_text.to_owned().unwrap_or("".to_owned()));
                     self.set_state(BotState::Catch);
                 }
             }
             DetectionMethod::Audio => {
-                let confidence = self.audio_detector.inference().unwrap_or(0.0);
+                let confidence = self.audio_detector.last_confidence_level;
                 if confidence > (self.settings.read().unwrap().audio.min_confidence as f32 / 100.0)
                 {
                     info!(
@@ -116,6 +100,17 @@ impl Bot {
                     );
                     self.set_state(BotState::Catch);
                 }
+            }
+            DetectionMethod::YOLO => {
+                let rgb_frame = {
+                    let guard = self.shared_frame.lock().unwrap();
+                    let Some(ref frame) = *guard else {
+                        return;
+                    };
+                    frame.clone()
+                };
+                
+                info!("{:?}", self.yolo_detector.last_detection);
             }
         }
     }

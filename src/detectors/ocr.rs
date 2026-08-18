@@ -1,3 +1,4 @@
+use image::buffer::ConvertBuffer;
 use image::{Pixel, RgbImage, RgbaImage};
 use oar_ocr::domain::tasks::TextDetectionConfig;
 use oar_ocr::prelude::*;
@@ -10,6 +11,7 @@ static KEYS_STR: &str = include_str!("../../assets/ppocr_keys.txt");
 
 pub struct Ocr {
     engine: OAROCR,
+    pub last_detected_text: Option<String>,
 }
 
 impl Default for Ocr {
@@ -29,7 +31,7 @@ impl Default for Ocr {
         .build()
         .expect("Failed to initialize OcrEngine via ort");
 
-        Ocr { engine }
+        Ocr { engine, last_detected_text: None}
     }
 }
 
@@ -39,24 +41,30 @@ impl Ocr {
         re.replace_all(input, " ").to_string()
     }
 
-    pub fn get_strings_from_frame(&mut self, frame: RgbImage) -> String {
+    pub fn update(&mut self, frame: RgbaImage) {
+        let frame = frame.convert();
+
         let results = self.engine.predict(vec![frame]).unwrap_or_default();
 
         if let Some(frame_result) = results.into_iter().next() {
-            frame_result
+            self.last_detected_text = Some(frame_result
                 .text_regions
                 .iter()
                 .filter_map(|region| region.text_with_confidence())
                 .map(|(text, _confidence)| Ocr::clean_ocr_text(&text).trim().to_owned())
                 .filter(|string| !string.is_empty())
-                .collect()
+                .collect());
         } else {
-            String::new()
+            self.last_detected_text = None
         }
     }
 
-    pub fn is_needed_string(needed_string: &str, string: &str, thresh: usize) -> bool {
+    pub fn is_needed_string(&self, needed_string: &str, thresh: usize) -> bool {
         let needed_strings: Vec<&str> = needed_string.split(",").collect();
+
+        let Some(ref string) = self.last_detected_text else {
+            return false;
+        };
 
         for needed_string in &needed_strings {
             let needed_string = needed_string.trim();

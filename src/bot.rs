@@ -2,6 +2,7 @@ pub mod controller;
 pub mod handlers;
 pub mod types;
 
+use image::{RgbaImage, buffer::ConvertBuffer};
 use types::{BotCommand, BotState, DetectionMethod};
 
 use crate::{
@@ -12,7 +13,6 @@ use crate::{
     ui::UiSended,
 };
 
-use image::{DynamicImage, GrayImage};
 use log::info;
 
 use std::{
@@ -25,7 +25,8 @@ use std::{
 
 pub struct Bot {
     ocr_detector: detectors::ocr::Ocr,
-    audio_detector: detectors::onnx_audio::ONNXAudio,
+    audio_detector: detectors::onnx_audio::OnnxAudio,
+    yolo_detector: detectors::onnx_yolo::OnnxYolo,
     movemap_detector: detectors::movemap::Movemap,
     shared_frame: SharedFrame,
     force_draw_frame: SharedFrame,
@@ -48,7 +49,8 @@ impl Bot {
         force_draw_frame: SharedFrame,
         settings: Arc<RwLock<Settings>>,
         ocr_detector: detectors::ocr::Ocr,
-        audio_detector: detectors::onnx_audio::ONNXAudio,
+        audio_detector: detectors::onnx_audio::OnnxAudio,
+        yolo_detector: detectors::onnx_yolo::OnnxYolo,
         movemap_detector: detectors::movemap::Movemap,
     ) -> Bot {
         Bot {
@@ -62,6 +64,7 @@ impl Bot {
             ocr_detector,
             movemap_detector,
             audio_detector,
+            yolo_detector,
             last_frame_start: Instant::now(),
             fps_handler: FpsHandler::default(),
         }
@@ -72,22 +75,21 @@ impl Bot {
             self.last_frame_start = Instant::now();
 
             self.handle_commands();
-            self.update();
-            let detection_method = self.settings.read().unwrap().bot.detection_method.clone();
+
             let capture_fps = self.settings.read().unwrap().capture.fps;
 
+            self.update_detectors();
+            self.update_state();
+
+            let detection_method = self.settings.read().unwrap().bot.detection_method.clone();
+
             if detection_method == DetectionMethod::Audio {
-                let waveform_image = self.audio_detector.render_waveform(600, 600);
-                if waveform_image.is_some() {
-                    *self.force_draw_frame.lock().unwrap() = waveform_image;
-                }
                 self.manage_sleep(30);
             } else {
                 self.manage_sleep(capture_fps);
-                if !self.settings.read().unwrap().movemap.draw_mask {
-                    *self.force_draw_frame.lock().unwrap() = None;
-                }
             }
+
+            self.draw_to_ui();
 
             self.fps_handler.add(self.last_frame_start);
 
@@ -110,11 +112,37 @@ impl Bot {
     pub fn stop(&mut self) {
         info!("===== Bot stop =====");
         self.set_state(BotState::Idle);
-        *self.force_draw_frame.lock().unwrap() = None;
-        let _ = self.tx.send(UiSended::LiquidGap(None));
     }
 
-    fn update(&mut self) {
+    fn update_detectors(&mut self) {
+        let detection_method = self.settings.read().unwrap().bot.detection_method.clone();
+
+        match detection_method {
+            DetectionMethod::Audio => {
+                self.audio_detector.update();
+            }
+            DetectionMethod::Ocr => {
+                let Some(frame) = self.shared_frame.lock().unwrap().clone() else {
+                    return;
+                };
+                self.ocr_detector.update(frame);
+            }
+            DetectionMethod::YOLO => {
+                let Some(frame) = self.shared_frame.lock().unwrap().clone() else {
+                    return;
+                };
+                self.yolo_detector.update(&frame);
+            }
+            DetectionMethod::Movemap => {
+                let Some(frame) = self.shared_frame.lock().unwrap().clone() else {
+                    return;
+                };
+                self.movemap_detector.update(frame);
+            }
+        }
+    }
+
+    fn update_state(&mut self) {
         match self.state {
             BotState::Idle => {}
             BotState::LiquidLevelCalibration(time) => self.handle_liquid_calibration(time),
@@ -129,9 +157,6 @@ impl Bot {
                 self.set_state(BotState::CatchingCooldown(Instant::now()));
             }
             BotState::CastingCooldown(time) => {
-                if self.settings.read().unwrap().bot.detection_method == DetectionMethod::Movemap {
-                    self.get_and_show_difference_mask();
-                }
                 if time.elapsed()
                     > Duration::from_millis(self.settings.read().unwrap().bot.casting_delay_millis)
                 {
@@ -149,9 +174,6 @@ impl Bot {
                 }
             }
             BotState::CatchingCooldown(time) => {
-                if self.settings.read().unwrap().bot.detection_method == DetectionMethod::Movemap {
-                    self.get_and_show_difference_mask();
-                }
                 if time.elapsed()
                     > Duration::from_millis(self.settings.read().unwrap().bot.catching_delay_millis)
                 {
@@ -159,24 +181,6 @@ impl Bot {
                 }
             }
         }
-    }
-
-    fn get_and_show_difference_mask(&mut self) -> Option<GrayImage> {
-        let Some(frame) = self.shared_frame.lock().unwrap().clone() else {
-            return None;
-        };
-        let Some(difference_mask) = self.movemap_detector.get_difference_mask(frame) else {
-            return None;
-        };
-
-        if self.settings.read().unwrap().movemap.draw_mask {
-            let dyn_img = DynamicImage::ImageLuma8(difference_mask.clone());
-            *self.force_draw_frame.lock().unwrap() = Some(dyn_img.to_rgba8());
-        } else {
-            *self.force_draw_frame.lock().unwrap() = None;
-        }
-
-        Some(difference_mask)
     }
 
     fn manage_sleep(&mut self, target_fps: u8) {
@@ -205,6 +209,63 @@ impl Bot {
                 BotCommand::Stop => {
                     self.stop();
                 }
+            }
+        }
+    }
+
+    fn draw_to_ui(&self) {
+        let detection_method = self.settings.read().unwrap().bot.detection_method.clone();
+
+        match detection_method {
+            DetectionMethod::Audio => {
+                let Some(waveform_image) = self.audio_detector.render_waveform(600, 600) else {
+                    return;
+                };
+
+                *self.force_draw_frame.lock().unwrap() = Some(waveform_image);
+            }
+            DetectionMethod::Ocr => {
+                *self.force_draw_frame.lock().unwrap() = self.shared_frame.lock().unwrap().clone();
+            }
+            DetectionMethod::YOLO => {
+                let Some(mut draw_frame) = self.shared_frame.lock().unwrap().clone() else {
+                    *self.force_draw_frame.lock().unwrap() = None;
+                    return;
+                };
+
+                if let Some(detection) = self.yolo_detector.last_detection.clone() {
+                    detection.draw(&mut draw_frame);
+                };
+
+                *self.force_draw_frame.lock().unwrap() = Some(draw_frame);
+            }
+            DetectionMethod::Movemap => {
+                let mut draw_image: RgbaImage = if self.settings.read().unwrap().movemap.draw_mask {
+                    let Some(movemap_image) = self.movemap_detector.last_difference_mask.clone() else {
+                        return;
+                    };
+
+                    movemap_image.convert()
+                } else {
+                    let Some(frame) = self.shared_frame.lock().unwrap().clone() else {
+                        return;
+                    };
+                    frame
+                };
+
+                if let Some((y0, y1)) = self.movemap_detector.get_liquid_gap()
+                {
+                    let (width, height) = draw_image.dimensions();
+                    for (y, color) in [(y0, [0, 0, 255, 255]), (y1, [255, 0, 0, 255])] {
+                        if y < height {
+                            for x in 0..width {
+                                draw_image.put_pixel(x, y, image::Rgba(color));
+                            }
+                        }
+                    }
+                }
+
+                *self.force_draw_frame.lock().unwrap() = Some(draw_image.convert());
             }
         }
     }

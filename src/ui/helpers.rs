@@ -6,19 +6,6 @@ use std::str::FromStr;
 
 impl App {
     pub(crate) fn update_preview(&mut self, ctx: &egui::Context, new_frame: &mut image::RgbaImage) {
-        if let Some((y0, y1)) = self.last_liquid_gap
-            && self.local_settings.bot.detection_method == DetectionMethod::Movemap
-        {
-            let (width, height) = new_frame.dimensions();
-            for (y, color) in [(y0, [0, 0, 255, 255]), (y1, [255, 0, 0, 255])] {
-                if y < height {
-                    for x in 0..width {
-                        new_frame.put_pixel(x, y, image::Rgba(color));
-                    }
-                }
-            }
-        }
-
         let size = [new_frame.width() as usize, new_frame.height() as usize];
         let pixels = new_frame.as_flat_samples();
         let color_image = egui::ColorImage::from_rgba_unmultiplied(size, pixels.as_slice());
@@ -43,6 +30,7 @@ impl App {
                     self.local_settings.capture.margin = self.local_settings.ocr.margin;
                 }
                 DetectionMethod::Audio => {}
+                DetectionMethod::YOLO => {}
             }
 
             *self.settings.write().unwrap() = self.local_settings.clone();

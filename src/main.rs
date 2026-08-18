@@ -16,6 +16,8 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
+use crate::detectors::onnx_yolo;
+
 fn main() {
     let (log_tx, log_rx) = mpsc::channel();
 
@@ -63,11 +65,13 @@ fn main() {
     let audio_server = audio_server::AudioServer::new(Duration::from_millis(700), 22050)
         .unwrap_or_else(|err| panic!("{}", err));
     let audio_detector =
-        detectors::onnx_audio::ONNXAudio::new(audio_server, 22050)
+        detectors::onnx_audio::OnnxAudio::new(audio_server, 22050)
             .unwrap_or_else(|err| {
                 error!("Failed to initialize ONNX Audio: {}", err);
                 panic!("{}", err);
             });
+
+    let yolo_detector = onnx_yolo::OnnxYolo::default();
 
     std::thread::spawn(move || {
         let mut bot = bot::Bot::new(
@@ -78,6 +82,7 @@ fn main() {
             settings_for_bot,
             ocr_detector,
             audio_detector,
+            yolo_detector,
             movemap_detector,
         );
         bot.run();
@@ -89,7 +94,6 @@ fn main() {
         log_rx,
         Arc::clone(&settings),
         terminal,
-        Arc::clone(&shared_frame),
-        force_draw_ui_frame,
+        force_draw_ui_frame
     );
 }

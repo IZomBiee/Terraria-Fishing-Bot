@@ -10,6 +10,7 @@ pub struct Movemap {
     pub threshold: Option<u32>,
     settings: Arc<RwLock<Settings>>,
     last_frame: Option<RgbaImage>,
+    pub last_difference_mask: Option<GrayImage>,
     pub threshold_calibrator: ThresholdCalibrator,
     pub liquid_level_calibrator: LiquidLevelCalibrator,
 }
@@ -21,15 +22,20 @@ impl Movemap {
             last_frame: None,
             liquid_level: None,
             threshold: None,
+            last_difference_mask: None,
             threshold_calibrator: ThresholdCalibrator::default(),
             liquid_level_calibrator: LiquidLevelCalibrator::default(),
         }
     }
 
-    pub fn is_detected(&self, difference_mask: &GrayImage) -> bool {
+    pub fn is_detected(&self) -> bool {
         let detection_gap = self
             .get_liquid_gap()
             .expect("Movemap detector was used without liquid level calibration.");
+
+        let Some(ref difference_mask) = self.last_difference_mask else {
+            return false;
+        };
 
         let difference_mask = &imageops::crop_imm(
             difference_mask,
@@ -82,14 +88,19 @@ impl Movemap {
         return true;
     }
 
-    pub fn get_difference_mask(&mut self, frame: RgbaImage) -> Option<GrayImage> {
-        let Some(last_frame) = self.last_frame.as_ref() else {
+    pub fn update(&mut self, frame: RgbaImage) {
+        let Some(ref last_frame) = self.last_frame else {
             self.last_frame = Some(frame);
-            return None;
+            return;
         };
-        let difference_mask = rgba_difference_mask(last_frame, &frame);
+
+        if last_frame.width() == frame.width() && last_frame.height() == frame.height() {
+            self.last_difference_mask = Some(rgba_difference_mask(last_frame, &frame));
+        } else {
+            self.last_difference_mask = None;
+        }
+       
         self.last_frame = Some(frame);
-        return Some(difference_mask);
     }
 
     pub fn get_liquid_gap(&self) -> Option<(u32, u32)> {
@@ -120,6 +131,7 @@ impl Movemap {
         self.threshold = None;
         self.liquid_level = None;
         self.last_frame = None;
+        self.last_difference_mask = None;
     }
 }
 

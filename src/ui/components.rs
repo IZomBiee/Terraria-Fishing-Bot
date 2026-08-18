@@ -17,6 +17,7 @@ impl App {
                         ui.selectable_value(detection_method, DetectionMethod::Movemap, "MoveMap");
                         ui.selectable_value(detection_method, DetectionMethod::Ocr, "Ocr");
                         ui.selectable_value(detection_method, DetectionMethod::Audio, "Audio");
+                        ui.selectable_value(detection_method, DetectionMethod::YOLO, "YOLO");
                     });
             });
         }
@@ -72,6 +73,12 @@ impl App {
             }
             DetectionMethod::Audio => {
                 let settings = &mut self.local_settings.audio;
+                ui.add(
+                    egui::Slider::new(&mut settings.min_confidence, 0..=100).text("Min Confidence (%)"),
+                );
+            }
+            DetectionMethod::YOLO => {
+                let settings = &mut self.local_settings.yolo;
                 ui.add(
                     egui::Slider::new(&mut settings.min_confidence, 0..=100).text("Min Confidence (%)"),
                 );

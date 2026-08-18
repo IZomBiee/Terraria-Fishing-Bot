@@ -20,7 +20,6 @@ impl eframe::App for App {
 
         while let Ok(recived) = self.rx.try_recv() {
             match recived {
-                UiSended::LiquidGap(liquid_gap) => self.last_liquid_gap = liquid_gap,
                 UiSended::ChangeState(state) => self.last_state = state,
                 UiSended::SetBotFps(fps) => self.bot_fps = fps,
                 UiSended::SetCaptureFps(fps) => self.capture_fps = fps,
@@ -37,7 +36,7 @@ impl eframe::App for App {
             let needed_keycodes = App::string_to_keycodes(hotkey);
             if keys.eq(&needed_keycodes) {
                 if self.last_toggle_key_time.is_none()
-                    || self.last_toggle_key_time.unwrap().elapsed() > Duration::from_millis(100)
+                    || self.last_toggle_key_time.unwrap().elapsed() > Duration::from_millis(300)
                 {
                     match self.last_state {
                         BotState::Idle => {
@@ -53,22 +52,13 @@ impl eframe::App for App {
         }
 
         let maybe_img = self
-            .force_draw_frame
+            .draw_frame
             .lock()
             .ok()
             .and_then(|guard| guard.clone());
 
         if let Some(mut rgba_img) = maybe_img {
             self.update_preview(ctx, &mut rgba_img);
-        } else {
-            let maybe_img = self
-                .shared_frame
-                .lock()
-                .ok()
-                .and_then(|guard| guard.clone());
-            if let Some(mut rgba_img) = maybe_img {
-                self.update_preview(ctx, &mut rgba_img);
-            }
         }
 
         Panel::left("left_panel")

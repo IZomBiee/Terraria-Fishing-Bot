@@ -100,6 +100,19 @@ impl Default for AudioSettings {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct YoloSettings {
+    pub min_confidence: u8,
+}
+
+impl Default for YoloSettings {
+    fn default() -> Self {
+        Self {
+            min_confidence: 50,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Default, Clone, PartialEq)]
 pub struct Settings {
     pub capture: CaptureSettings,
@@ -107,6 +120,7 @@ pub struct Settings {
     pub movemap: MovemapSettings,
     pub ocr: OcrSettings,
     pub audio: AudioSettings,
+    pub yolo: YoloSettings,
 }
 
 impl Settings {

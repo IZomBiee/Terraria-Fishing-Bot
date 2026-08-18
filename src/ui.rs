@@ -18,7 +18,6 @@ use crate::cursor_capture_server::SharedFrame;
 use crate::settings::Settings;
 
 pub enum UiSended {
-    LiquidGap(Option<(u32, u32)>),
     ChangeState(BotState),
     SetBotFps(f32),
     SetCaptureFps(f32),
@@ -31,10 +30,8 @@ struct App {
     settings: Arc<RwLock<Settings>>,
     terminal: Terminal,
     texture: Option<egui::TextureHandle>,
-    shared_frame: SharedFrame,
-    force_draw_frame: SharedFrame,
+    draw_frame: SharedFrame,
     last_toggle_key_time: Option<Instant>,
-    last_liquid_gap: Option<(u32, u32)>,
     last_state: BotState,
     local_settings: Settings,
     bot_fps: f32,
@@ -49,8 +46,7 @@ pub fn run(
     log_rx: Receiver<String>,
     settings: Arc<RwLock<Settings>>,
     terminal: Terminal,
-    shared_frame: SharedFrame,
-    force_draw_frame: SharedFrame,
+    draw_frame: SharedFrame
 ) -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([900.0, 400.0]),
@@ -72,10 +68,8 @@ pub fn run(
                 local_settings,
                 terminal,
                 texture: None,
-                shared_frame,
-                force_draw_frame,
+                draw_frame,
                 last_toggle_key_time: None,
-                last_liquid_gap: None,
                 last_state: BotState::Idle,
                 bot_fps: 0.0,
                 capture_fps: 0.0,
