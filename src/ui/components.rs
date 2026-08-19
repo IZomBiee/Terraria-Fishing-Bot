@@ -73,15 +73,24 @@ impl App {
             }
             DetectionMethod::Audio => {
                 let settings = &mut self.local_settings.audio;
+
                 ui.add(
                     egui::Slider::new(&mut settings.min_confidence, 0..=100).text("Min Confidence (%)"),
                 );
             }
             DetectionMethod::YOLO => {
                 let settings = &mut self.local_settings.yolo;
+                
                 ui.add(
                     egui::Slider::new(&mut settings.min_confidence, 0..=100).text("Min Confidence (%)"),
                 );
+
+                ui.add(
+                    egui::Slider::new(&mut settings.margin, 100..=500)
+                        .text("Detection Area (px)"),
+                );
+
+                ui.add(egui::Slider::new(&mut settings.fps, 5..=20).text("Framerate"));
             }
         };
     }

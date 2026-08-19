@@ -30,7 +30,10 @@ impl App {
                     self.local_settings.capture.margin = self.local_settings.ocr.margin;
                 }
                 DetectionMethod::Audio => {}
-                DetectionMethod::YOLO => {}
+                DetectionMethod::YOLO => {
+                    self.local_settings.capture.fps = self.local_settings.yolo.fps;
+                    self.local_settings.capture.margin = self.local_settings.yolo.margin;
+                }
             }
 
             *self.settings.write().unwrap() = self.local_settings.clone();

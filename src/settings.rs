@@ -102,12 +102,16 @@ impl Default for AudioSettings {
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct YoloSettings {
+    pub margin: u32,
+    pub fps: u8,
     pub min_confidence: u8,
 }
 
 impl Default for YoloSettings {
     fn default() -> Self {
         Self {
+            margin: 300,
+            fps: 10,
             min_confidence: 50,
         }
     }
