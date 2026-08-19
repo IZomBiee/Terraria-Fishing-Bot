@@ -62,7 +62,7 @@ Terraria advanced fishing bot, written entirely in Rust. Created for practicing/
 
 ### Yolo+Audio Method
 - Make less false positives.
-- Only catch if both of detectors trigered.
+- Only catch if both of detectors triggered.
 
 ### Movemap Method
 - The bot WILL NOT WORK in movemap mode if you do not have waves enabled in Terraria settings.
