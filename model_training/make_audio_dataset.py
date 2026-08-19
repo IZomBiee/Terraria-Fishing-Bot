@@ -3,7 +3,7 @@ import wave
 import glob
 
 # ==================== CONFIGURATION SETTINGS ====================
-INPUT_DIR = r"A:\Datasets\Terraria-Sound"                 # Directory containing your raw .wav and .txt files
+INPUT_DIR = r"A:\Datasets\Terraria-Sound"                # Directory containing your raw .wav and .txt files
 OUTPUT_DIR = r"dataset"                                  # Where the positive/negative folders will be created
 FRAGMENT_DURATION = 0.7                                  # The EXACT duration (in seconds) your model requires
 BUFFER_MARGIN = 0.5                                      # Minimum distance (in seconds) between positive labels and background samples

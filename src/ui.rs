@@ -46,7 +46,7 @@ pub fn run(
     log_rx: Receiver<String>,
     settings: Arc<RwLock<Settings>>,
     terminal: Terminal,
-    draw_frame: SharedFrame
+    draw_frame: SharedFrame,
 ) -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([900.0, 400.0]),

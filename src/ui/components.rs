@@ -18,6 +18,11 @@ impl App {
                         ui.selectable_value(detection_method, DetectionMethod::Ocr, "Ocr");
                         ui.selectable_value(detection_method, DetectionMethod::Audio, "Audio");
                         ui.selectable_value(detection_method, DetectionMethod::YOLO, "YOLO");
+                        ui.selectable_value(
+                            detection_method,
+                            DetectionMethod::YoloAudio,
+                            "Yolo+Audio",
+                        );
                     });
             });
         }
@@ -27,8 +32,7 @@ impl App {
                 let settings = &mut self.local_settings.movemap;
 
                 ui.add(
-                    egui::Slider::new(&mut settings.margin, 10..=300)
-                        .text("Detection Area (px)"),
+                    egui::Slider::new(&mut settings.margin, 10..=300).text("Detection Area (px)"),
                 );
                 ui.add(egui::Slider::new(&mut settings.fps, 5..=60).text("Framerate"));
 
@@ -57,8 +61,7 @@ impl App {
                 let settings = &mut self.local_settings.ocr;
 
                 ui.add(
-                    egui::Slider::new(&mut settings.margin, 100..=500)
-                        .text("Detection Area (px)"),
+                    egui::Slider::new(&mut settings.margin, 100..=500).text("Detection Area (px)"),
                 );
                 ui.add(egui::Slider::new(&mut settings.fps, 3..=20).text("Framerate"));
 
@@ -75,26 +78,41 @@ impl App {
                 let settings = &mut self.local_settings.audio;
 
                 ui.add(
-                    egui::Slider::new(&mut settings.min_confidence, 0..=100).text("Min Confidence (%)"),
+                    egui::Slider::new(&mut settings.min_confidence, 0..=100)
+                        .text("Min Confidence (%)"),
                 );
             }
             DetectionMethod::YOLO => {
                 let settings = &mut self.local_settings.yolo;
 
                 ui.add(
-                    egui::Slider::new(&mut settings.margin, 100..=500)
-                        .text("Detection Area (px)"),
+                    egui::Slider::new(&mut settings.margin, 100..=500).text("Detection Area (px)"),
                 );
 
-                ui.add(egui::Slider::new(&mut settings.fps, 5..=20).text("Framerate"));
-
-                ui.add(
-                    egui::Slider::new(&mut settings.min_confidence, 0..=100).text("Min Confidence (%)"),
-                );
+                ui.add(egui::Slider::new(&mut settings.fps, 3..=20).text("Framerate"));
 
                 ui.add(
-                    egui::Slider::new(&mut settings.threshold, 2..=20).text("Threshold (px)"),
+                    egui::Slider::new(&mut settings.min_confidence, 1..=100)
+                        .text("Min Confidence (%)"),
                 );
+
+                ui.add(egui::Slider::new(&mut settings.threshold, 2..=15).text("Threshold (px)"));
+            }
+            DetectionMethod::YoloAudio => {
+                let settings = &mut self.local_settings.yolo_audio;
+
+                ui.add(
+                    egui::Slider::new(&mut settings.margin, 100..=500).text("Detection Area (px)"),
+                );
+
+                ui.add(egui::Slider::new(&mut settings.fps, 3..=15).text("Framerate"));
+
+                ui.add(
+                    egui::Slider::new(&mut settings.audio_min_confidence, 0..=100)
+                        .text("Audio Min Confidence (%)"),
+                );
+
+                ui.add(egui::Slider::new(&mut settings.yolo_threshold, 2..=20).text("Yolo Threshold (px)"));
             }
         };
     }

@@ -1,10 +1,10 @@
+use image::{DynamicImage, Rgba, RgbaImage};
+use imageproc::drawing::draw_hollow_rect_mut;
+use imageproc::rect::Rect;
 use std::cmp::Ordering;
 use std::fs::File;
 use std::io::Write;
-use image::{DynamicImage, Rgba, RgbaImage};
 use ultralytics_inference::{InferenceConfig, YOLOModel};
-use imageproc::drawing::draw_hollow_rect_mut;
-use imageproc::rect::Rect;
 
 static MODEL_BYTES: &[u8] = include_bytes!("../../assets/yolo_model.onnx");
 
@@ -14,10 +14,10 @@ pub struct Detection {
     pub x0: u32,
     pub y0: u32,
     pub x1: u32,
-    pub y1: u32
+    pub y1: u32,
 }
 
-impl Detection { 
+impl Detection {
     pub fn draw(&self, image: &mut RgbaImage) {
         let width = self.x1 as i32 - self.x0 as i32;
         let height = self.y1 as i32 - self.y0 as i32;
@@ -34,7 +34,7 @@ impl Detection {
 pub struct OnnxYolo {
     model: YOLOModel,
     pub previous_detection: Option<Detection>,
-    pub last_detection: Option<Detection>
+    pub last_detection: Option<Detection>,
 }
 
 impl Default for OnnxYolo {
@@ -47,7 +47,8 @@ impl Default for OnnxYolo {
         let temp_path = std::env::temp_dir().join("terraria_yolo_model.onnx");
         if !temp_path.exists() {
             let mut file = File::create(&temp_path).expect("Failed to create temp model file");
-            file.write_all(MODEL_BYTES).expect("Failed to write model bytes");
+            file.write_all(MODEL_BYTES)
+                .expect("Failed to write model bytes");
         }
 
         let model = YOLOModel::load_with_config(&temp_path, config.clone())
@@ -94,7 +95,13 @@ impl OnnxYolo {
 
         let confidence = most_confident_box.conf().first().copied().unwrap_or(0.0);
 
-        let detection = Detection { confidence, x0, y0, x1, y1};
+        let detection = Detection {
+            confidence,
+            x0,
+            y0,
+            x1,
+            y1,
+        };
 
         self.last_detection = Some(detection.clone());
     }

@@ -5,14 +5,12 @@ use std::time::Duration;
 
 pub struct AudioServer {
     _stream: cpal::Stream,
-    ring_buffer: Arc<Mutex<VecDeque<f32>>>
+    ring_buffer: Arc<Mutex<VecDeque<f32>>>,
 }
 
 impl AudioServer {
     pub fn new(ring_buffer_duration: Duration, sample_rate: u128) -> Result<Self, String> {
-        let max_samples = {
-            ((sample_rate * ring_buffer_duration.as_millis()) / 1000) as usize
-        };
+        let max_samples = { ((sample_rate * ring_buffer_duration.as_millis()) / 1000) as usize };
 
         let ring_buffer = Arc::new(Mutex::new(VecDeque::with_capacity(max_samples)));
         let ring_buffer_clone = Arc::clone(&ring_buffer);
@@ -65,7 +63,7 @@ impl AudioServer {
 
         Ok(Self {
             _stream: stream,
-            ring_buffer
+            ring_buffer,
         })
     }
 

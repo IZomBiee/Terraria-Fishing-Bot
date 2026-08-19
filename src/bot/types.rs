@@ -42,4 +42,5 @@ pub enum DetectionMethod {
     Audio,
     Ocr,
     YOLO,
+    YoloAudio,
 }

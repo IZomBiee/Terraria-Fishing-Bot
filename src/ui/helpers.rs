@@ -34,6 +34,10 @@ impl App {
                     self.local_settings.capture.fps = self.local_settings.yolo.fps;
                     self.local_settings.capture.margin = self.local_settings.yolo.margin;
                 }
+                DetectionMethod::YoloAudio => {
+                    self.local_settings.capture.fps = self.local_settings.yolo_audio.fps;
+                    self.local_settings.capture.margin = self.local_settings.yolo_audio.margin;
+                }
             }
 
             *self.settings.write().unwrap() = self.local_settings.clone();

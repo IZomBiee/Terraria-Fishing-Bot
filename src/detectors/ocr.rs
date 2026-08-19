@@ -1,5 +1,5 @@
-use image::buffer::ConvertBuffer;
 use image::RgbaImage;
+use image::buffer::ConvertBuffer;
 use oar_ocr::domain::tasks::TextDetectionConfig;
 use oar_ocr::prelude::*;
 use regex::Regex;
@@ -16,22 +16,21 @@ pub struct Ocr {
 
 impl Default for Ocr {
     fn default() -> Self {
-        let engine = OAROCRBuilder::new(
-            DET_MODEL_BYTES,
-            REC_MODEL_BYTES,
-            "",
-        )
-        .character_dict_content(KEYS_STR)
-        .text_detection_config(TextDetectionConfig {
-            score_threshold: 0.2,
-            box_threshold: 0.45,
-            unclip_ratio: 1.4,
-            ..Default::default()
-        })
-        .build()
-        .expect("Failed to initialize OcrEngine via ort");
+        let engine = OAROCRBuilder::new(DET_MODEL_BYTES, REC_MODEL_BYTES, "")
+            .character_dict_content(KEYS_STR)
+            .text_detection_config(TextDetectionConfig {
+                score_threshold: 0.2,
+                box_threshold: 0.45,
+                unclip_ratio: 1.4,
+                ..Default::default()
+            })
+            .build()
+            .expect("Failed to initialize OcrEngine via ort");
 
-        Ocr { engine, last_detected_text: None}
+        Ocr {
+            engine,
+            last_detected_text: None,
+        }
     }
 }
 
@@ -47,13 +46,15 @@ impl Ocr {
         let results = self.engine.predict(vec![frame]).unwrap_or_default();
 
         if let Some(frame_result) = results.into_iter().next() {
-            self.last_detected_text = Some(frame_result
-                .text_regions
-                .iter()
-                .filter_map(|region| region.text_with_confidence())
-                .map(|(text, _confidence)| Ocr::clean_ocr_text(&text).trim().to_owned())
-                .filter(|string| !string.is_empty())
-                .collect());
+            self.last_detected_text = Some(
+                frame_result
+                    .text_regions
+                    .iter()
+                    .filter_map(|region| region.text_with_confidence())
+                    .map(|(text, _confidence)| Ocr::clean_ocr_text(&text).trim().to_owned())
+                    .filter(|string| !string.is_empty())
+                    .collect(),
+            );
         } else {
             self.last_detected_text = None
         }

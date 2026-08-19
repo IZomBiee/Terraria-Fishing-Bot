@@ -99,7 +99,7 @@ impl Movemap {
         } else {
             self.last_difference_mask = None;
         }
-       
+
         self.last_frame = Some(frame);
     }
 

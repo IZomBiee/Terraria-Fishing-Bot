@@ -16,10 +16,7 @@ pub struct OnnxAudio {
 }
 
 impl OnnxAudio {
-    pub fn new(
-        audio_server: AudioServer,
-        sample_rate: u32,
-    ) -> Result<Self, String> {
+    pub fn new(audio_server: AudioServer, sample_rate: u32) -> Result<Self, String> {
         let onnx_session = Session::builder()
             .map_err(|e| format!("Failed to build ONNX builder: {}", e))?
             .commit_from_memory(MODEL_BYTES)
@@ -55,7 +52,9 @@ impl OnnxAudio {
             return;
         };
 
-        let input_tensor = self.prepare_session_inputs(&snapshot.make_contiguous()).unwrap();
+        let input_tensor = self
+            .prepare_session_inputs(&snapshot.make_contiguous())
+            .unwrap();
 
         let Some(output_tensor) = self.get_output_tensor(input_tensor) else {
             self.last_confidence_level = 0.0;

@@ -117,6 +117,27 @@ impl Default for YoloSettings {
     }
 }
 
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct YoloAudioSettings {
+    pub yolo_threshold: u8,
+    pub audio_min_confidence: u8,
+    pub margin: u32,
+    pub fps: u8,
+
+}
+
+impl Default for YoloAudioSettings {
+    fn default() -> Self {
+        Self {
+            yolo_threshold: 5,
+            audio_min_confidence: 25,
+            margin: 300,
+            fps: 10,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Default, Clone, PartialEq)]
 pub struct Settings {
     pub capture: CaptureSettings,
@@ -125,6 +146,7 @@ pub struct Settings {
     pub ocr: OcrSettings,
     pub audio: AudioSettings,
     pub yolo: YoloSettings,
+    pub yolo_audio: YoloAudioSettings,
 }
 
 impl Settings {

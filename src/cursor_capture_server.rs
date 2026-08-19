@@ -88,7 +88,9 @@ impl CursorCaptureServer {
 
             let target_fps = self.settings.read().map(|s| s.capture.fps).unwrap_or(30);
 
-            if target_fps == 0 || self.settings.read().unwrap().bot.detection_method == DetectionMethod::Audio {
+            if target_fps == 0
+                || self.settings.read().unwrap().bot.detection_method == DetectionMethod::Audio
+            {
                 thread::sleep(Duration::from_millis(100));
                 let _ = self.tx.send(UiSended::SetCaptureFps(0.0));
                 continue;
@@ -96,9 +98,12 @@ impl CursorCaptureServer {
 
             if let Some(frame) = self.capture_logic()
                 && let Ok(mut lock) = self.output_frame.lock()
-            {   
+            {
                 if last_time.elapsed() > Duration::from_secs(1) {
-                    let _ = frame.save(format!("C:\\Users\\patri\\Desktop\\Bobbers\\{}.png", counter));
+                    let _ = frame.save(format!(
+                        "C:\\Users\\patri\\Desktop\\Bobbers\\{}.png",
+                        counter
+                    ));
                     last_time = Instant::now();
                 }
                 *lock = Some(frame);

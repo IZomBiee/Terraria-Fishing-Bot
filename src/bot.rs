@@ -37,6 +37,7 @@ pub struct Bot {
     controller: controller::Controller,
     last_frame_start: Instant,
     fps_handler: FpsHandler,
+    last_yolo_detection_time: Option<Instant>,
 }
 
 unsafe impl Send for Bot {}
@@ -67,6 +68,7 @@ impl Bot {
             yolo_detector,
             last_frame_start: Instant::now(),
             fps_handler: FpsHandler::default(),
+            last_yolo_detection_time: None,
         }
     }
 
@@ -84,7 +86,7 @@ impl Bot {
             let detection_method = self.settings.read().unwrap().bot.detection_method.clone();
 
             if detection_method == DetectionMethod::Audio {
-                self.manage_sleep(30);
+                self.manage_sleep(20);
             } else {
                 self.manage_sleep(capture_fps);
             }
@@ -138,6 +140,14 @@ impl Bot {
                     return;
                 };
                 self.movemap_detector.update(frame);
+            }
+            DetectionMethod::YoloAudio => {
+                let Some(frame) = self.shared_frame.lock().unwrap().clone() else {
+                    return;
+                };
+
+                self.audio_detector.update();
+                self.yolo_detector.update(&frame);
             }
         }
     }
@@ -241,7 +251,8 @@ impl Bot {
             }
             DetectionMethod::Movemap => {
                 let mut draw_image: RgbaImage = if self.settings.read().unwrap().movemap.draw_mask {
-                    let Some(movemap_image) = self.movemap_detector.last_difference_mask.clone() else {
+                    let Some(movemap_image) = self.movemap_detector.last_difference_mask.clone()
+                    else {
                         return;
                     };
 
@@ -253,8 +264,7 @@ impl Bot {
                     frame
                 };
 
-                if let Some((y0, y1)) = self.movemap_detector.get_liquid_gap()
-                {
+                if let Some((y0, y1)) = self.movemap_detector.get_liquid_gap() {
                     let (width, height) = draw_image.dimensions();
                     for (y, color) in [(y0, [0, 0, 255, 255]), (y1, [255, 0, 0, 255])] {
                         if y < height {
@@ -266,6 +276,9 @@ impl Bot {
                 }
 
                 *self.force_draw_frame.lock().unwrap() = Some(draw_image.convert());
+            }
+            DetectionMethod::YoloAudio => {
+                *self.force_draw_frame.lock().unwrap() = self.shared_frame.lock().unwrap().clone();
             }
         }
     }

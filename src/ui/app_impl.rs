@@ -2,8 +2,8 @@ use crate::bot::types::{BotCommand, BotState};
 use crate::ui::{App, UiSended};
 use device_query::{DeviceQuery, DeviceState};
 use eframe::egui;
-use eframe::egui::Vec2;
 use eframe::egui::CentralPanel;
+use eframe::egui::Vec2;
 use eframe::egui::panel::Panel;
 use std::time::{Duration, Instant};
 
@@ -51,46 +51,40 @@ impl eframe::App for App {
             };
         }
 
-        let maybe_img = self
-            .draw_frame
-            .lock()
-            .ok()
-            .and_then(|guard| guard.clone());
+        let maybe_img = self.draw_frame.lock().ok().and_then(|guard| guard.clone());
 
         if let Some(mut rgba_img) = maybe_img {
             self.update_preview(ctx, &mut rgba_img);
         }
 
-        Panel::left("left_panel")
-            .resizable(false)
-            .show(ui, |ui| {
-                ui.vertical_centered(|ui| {
-                    ui.label(
-                        egui::RichText::new("General")
-                            .color(egui::Color32::WHITE)
-                            .size(18f32),
-                    );
-                });
-                self.general_contents(ui);
-
-                ui.vertical_centered(|ui| {
-                    ui.label(
-                        egui::RichText::new("Detection")
-                            .color(egui::Color32::WHITE)
-                            .size(18f32),
-                    );
-                });
-                self.detection_contents(ui);
-
-                ui.vertical_centered(|ui| {
-                    ui.label(
-                        egui::RichText::new("Info")
-                            .color(egui::Color32::WHITE)
-                            .size(18f32),
-                    );
-                });
-                self.information_contents(ui);
+        Panel::left("left_panel").resizable(false).show(ui, |ui| {
+            ui.vertical_centered(|ui| {
+                ui.label(
+                    egui::RichText::new("General")
+                        .color(egui::Color32::WHITE)
+                        .size(18f32),
+                );
             });
+            self.general_contents(ui);
+
+            ui.vertical_centered(|ui| {
+                ui.label(
+                    egui::RichText::new("Detection")
+                        .color(egui::Color32::WHITE)
+                        .size(18f32),
+                );
+            });
+            self.detection_contents(ui);
+
+            ui.vertical_centered(|ui| {
+                ui.label(
+                    egui::RichText::new("Info")
+                        .color(egui::Color32::WHITE)
+                        .size(18f32),
+                );
+            });
+            self.information_contents(ui);
+        });
 
         Panel::right("right_panel").show(ui, |ui| {
             self.terminal.show(ui);

@@ -82,11 +82,17 @@ impl Bot {
                     )
                 };
 
-                if self.ocr_detector.is_needed_string(
-                    &correct_detection_words,
-                    threshold,
-                ) {
-                    info!("Detected Word {}", self.ocr_detector.last_detected_text.to_owned().unwrap_or("".to_owned()));
+                if self
+                    .ocr_detector
+                    .is_needed_string(&correct_detection_words, threshold)
+                {
+                    info!(
+                        "Detected Word {}",
+                        self.ocr_detector
+                            .last_detected_text
+                            .to_owned()
+                            .unwrap_or("".to_owned())
+                    );
                     self.set_state(BotState::Catch);
                 }
             }
@@ -115,7 +121,38 @@ impl Bot {
                 let diff = dx.abs() + dy.abs();
 
                 if diff > self.settings.read().unwrap().yolo.threshold as i32 {
+                    info!("Detected movement of {diff} px.");
                     self.set_state(BotState::Catch);
+                }
+            }
+            DetectionMethod::YoloAudio => {
+                let Some(ref detection) = self.yolo_detector.last_detection else {
+                    return;
+                };
+
+                let Some(ref previous_detection) = self.yolo_detector.previous_detection else {
+                    return;
+                };
+
+                let dx = previous_detection.y0 as i32 - detection.y0 as i32;
+                let dy = previous_detection.x0 as i32 - detection.x0 as i32;
+                let diff = dx.abs() + dy.abs();
+
+                let confidence = self.audio_detector.last_confidence_level;
+
+                let yolo = diff > self.settings.read().unwrap().yolo_audio.yolo_threshold as i32;
+                if yolo {
+                    self.last_yolo_detection_time = Some(Instant::now());
+                }
+                let audio = confidence > (self.settings.read().unwrap().yolo_audio.audio_min_confidence as f32 / 100.0);
+                
+                
+                if let Some(time) = self.last_yolo_detection_time && audio 
+                {
+                    if time.elapsed() < Duration::from_millis(100) {
+                        info!("Detected sound with confidence {}% and bobber movement of {} px.", (confidence * 100.0).round(), diff);
+                        self.set_state(BotState::Catch);
+                    }
                 }
             }
         }
