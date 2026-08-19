@@ -49,7 +49,7 @@ Terraria advanced fishing bot, written entirely in Rust. Created for practicing/
 - The sound capture from the entire computer, not just the game.
 
 ### Audio Method
-- 
+- It works almost all the time, even with some noise - as long as it's not excessive.
 
 ### OCR Method
 - Requires Sonar Potions to detect fish text overlays.
