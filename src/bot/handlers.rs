@@ -102,15 +102,21 @@ impl Bot {
                 }
             }
             DetectionMethod::YOLO => {
-                let rgb_frame = {
-                    let guard = self.shared_frame.lock().unwrap();
-                    let Some(ref frame) = *guard else {
-                        return;
-                    };
-                    frame.clone()
+                let Some(ref detection) = self.yolo_detector.last_detection else {
+                    return;
                 };
-                
-                info!("{:?}", self.yolo_detector.last_detection);
+
+                let Some(ref previous_detection) = self.yolo_detector.previous_detection else {
+                    return;
+                };
+
+                let dx = previous_detection.y0 as i32 - detection.y0 as i32;
+                let dy = previous_detection.x0 as i32 - detection.x0 as i32;
+                let diff = dx.abs() + dy.abs();
+
+                if diff > self.settings.read().unwrap().yolo.threshold as i32 {
+                    self.set_state(BotState::Catch);
+                }
             }
         }
     }

@@ -105,6 +105,7 @@ pub struct YoloSettings {
     pub margin: u32,
     pub fps: u8,
     pub min_confidence: u8,
+    pub threshold: u8,
 }
 
 impl Default for YoloSettings {
@@ -113,6 +114,7 @@ impl Default for YoloSettings {
             margin: 300,
             fps: 10,
             min_confidence: 50,
+            threshold: 10,
         }
     }
 }

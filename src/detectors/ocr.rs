@@ -1,5 +1,5 @@
 use image::buffer::ConvertBuffer;
-use image::{Pixel, RgbImage, RgbaImage};
+use image::RgbaImage;
 use oar_ocr::domain::tasks::TextDetectionConfig;
 use oar_ocr::prelude::*;
 use regex::Regex;
@@ -99,16 +99,4 @@ impl Ocr {
 
         return false;
     }
-}
-
-pub fn rgba_2_rgb(rgba: &RgbaImage) -> RgbImage {
-    let (width, height) = rgba.dimensions();
-    let mut rgb = RgbImage::new(width, height);
-
-    for (x, y, pixel) in rgba.enumerate_pixels() {
-        let channels = pixel.channels();
-        rgb.put_pixel(x, y, image::Rgb([channels[0], channels[1], channels[2]]));
-    }
-
-    rgb
 }

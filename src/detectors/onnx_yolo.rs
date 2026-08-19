@@ -10,11 +10,11 @@ static MODEL_BYTES: &[u8] = include_bytes!("../../assets/yolo_model.onnx");
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Detection {
-    confidence: f32,
-    x0: u32,
-    y0: u32,
-    x1: u32,
-    y1: u32
+    pub confidence: f32,
+    pub x0: u32,
+    pub y0: u32,
+    pub x1: u32,
+    pub y1: u32
 }
 
 impl Detection { 
@@ -33,6 +33,7 @@ impl Detection {
 
 pub struct OnnxYolo {
     model: YOLOModel,
+    pub previous_detection: Option<Detection>,
     pub last_detection: Option<Detection>
 }
 
@@ -54,7 +55,8 @@ impl Default for OnnxYolo {
 
         Self {
             model,
-            last_detection: None
+            previous_detection: None,
+            last_detection: None,
         }
     }
 }
@@ -62,6 +64,8 @@ impl Default for OnnxYolo {
 impl OnnxYolo {
     pub fn update(&mut self, image: &RgbaImage) {
         let dynamic_img = DynamicImage::ImageRgba8(image.clone());
+
+        self.previous_detection = self.last_detection.clone();
 
         let Ok(results) = self.model.predict_image(&dynamic_img, String::new()) else {
             self.last_detection = None;

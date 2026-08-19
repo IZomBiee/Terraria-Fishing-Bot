@@ -80,10 +80,6 @@ impl App {
             }
             DetectionMethod::YOLO => {
                 let settings = &mut self.local_settings.yolo;
-                
-                ui.add(
-                    egui::Slider::new(&mut settings.min_confidence, 0..=100).text("Min Confidence (%)"),
-                );
 
                 ui.add(
                     egui::Slider::new(&mut settings.margin, 100..=500)
@@ -91,6 +87,14 @@ impl App {
                 );
 
                 ui.add(egui::Slider::new(&mut settings.fps, 5..=20).text("Framerate"));
+
+                ui.add(
+                    egui::Slider::new(&mut settings.min_confidence, 0..=100).text("Min Confidence (%)"),
+                );
+
+                ui.add(
+                    egui::Slider::new(&mut settings.threshold, 2..=20).text("Threshold (px)"),
+                );
             }
         };
     }
