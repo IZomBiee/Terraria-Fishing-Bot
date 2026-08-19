@@ -5,11 +5,12 @@ Terraria advanced fishing bot, written entirely in Rust. Created for practicing/
 ## Features
 
 - Reliable fishing in water/lava/honey
-- 4 detection methods:
+- 5 detection methods:
   - Audio (ONNX Neural Network model)
   - YOLO (Bobber position tracking)
   - OCR (Text detection)
   - Movemap (Pixel movement tracking)
+  - Yolo+Audio (Less false positives)
 - Reliable fishing with noise like enemies
 - GUI interface
 - Automatic potion use
@@ -58,6 +59,10 @@ Terraria advanced fishing bot, written entirely in Rust. Created for practicing/
 
 ### YOLO Method
 - It runs fairly smoothly but uses a lot of CPU resources, better to lower the frame rate.
+
+### Yolo+Audio Method
+- Make less false positives.
+- Only catch if both of detectors trigered.
 
 ### Movemap Method
 - The bot WILL NOT WORK in movemap mode if you do not have waves enabled in Terraria settings.

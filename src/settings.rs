@@ -35,7 +35,7 @@ impl Default for BotSettings {
             catching_delay_millis: 300,
             use_potions: false,
             potion_use_delay: Duration::from_secs(20),
-            detection_method: bot::types::DetectionMethod::YOLO,
+            detection_method: bot::types::DetectionMethod::Yolo,
             bot_toggle_hotkey: Some("P".to_owned()),
         }
     }

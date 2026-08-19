@@ -41,6 +41,6 @@ pub enum DetectionMethod {
     Movemap,
     Audio,
     Ocr,
-    YOLO,
+    Yolo,
     YoloAudio,
 }

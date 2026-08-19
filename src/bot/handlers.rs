@@ -107,7 +107,7 @@ impl Bot {
                     self.set_state(BotState::Catch);
                 }
             }
-            DetectionMethod::YOLO => {
+            DetectionMethod::Yolo => {
                 let Some(ref detection) = self.yolo_detector.last_detection else {
                     return;
                 };

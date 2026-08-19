@@ -17,7 +17,7 @@ impl App {
                         ui.selectable_value(detection_method, DetectionMethod::Movemap, "MoveMap");
                         ui.selectable_value(detection_method, DetectionMethod::Ocr, "Ocr");
                         ui.selectable_value(detection_method, DetectionMethod::Audio, "Audio");
-                        ui.selectable_value(detection_method, DetectionMethod::YOLO, "YOLO");
+                        ui.selectable_value(detection_method, DetectionMethod::Yolo, "Yolo");
                         ui.selectable_value(
                             detection_method,
                             DetectionMethod::YoloAudio,
@@ -82,7 +82,7 @@ impl App {
                         .text("Min Confidence (%)"),
                 );
             }
-            DetectionMethod::YOLO => {
+            DetectionMethod::Yolo => {
                 let settings = &mut self.local_settings.yolo;
 
                 ui.add(

@@ -129,7 +129,7 @@ impl Bot {
                 };
                 self.ocr_detector.update(frame);
             }
-            DetectionMethod::YOLO => {
+            DetectionMethod::Yolo => {
                 let Some(frame) = self.shared_frame.lock().unwrap().clone() else {
                     return;
                 };
@@ -237,7 +237,7 @@ impl Bot {
             DetectionMethod::Ocr => {
                 *self.force_draw_frame.lock().unwrap() = self.shared_frame.lock().unwrap().clone();
             }
-            DetectionMethod::YOLO => {
+            DetectionMethod::Yolo => {
                 let Some(mut draw_frame) = self.shared_frame.lock().unwrap().clone() else {
                     *self.force_draw_frame.lock().unwrap() = None;
                     return;
