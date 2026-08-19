@@ -26,7 +26,6 @@ pub struct BotSettings {
     pub potion_use_delay: Duration,
     pub detection_method: bot::types::DetectionMethod,
     pub bot_toggle_hotkey: Option<String>,
-    bot_target_fps: u8,
 }
 
 impl Default for BotSettings {
@@ -36,9 +35,8 @@ impl Default for BotSettings {
             catching_delay_millis: 300,
             use_potions: false,
             potion_use_delay: Duration::from_secs(20),
-            detection_method: bot::types::DetectionMethod::Movemap,
+            detection_method: bot::types::DetectionMethod::YOLO,
             bot_toggle_hotkey: Some("P".to_owned()),
-            bot_target_fps: 30,
         }
     }
 }
@@ -61,9 +59,9 @@ impl Default for MovemapSettings {
             detection_gap_size_precents: 30,
             calibration_time_ms: 5000,
             calibration_multiplier_precents: 70,
-            draw_mask: false,
+            draw_mask: true,
             fps: 20,
-            margin: 120,
+            margin: 150,
         }
     }
 }
@@ -81,8 +79,8 @@ impl Default for OcrSettings {
         Self {
             sonar_detection_threshold: 4,
             sonar_detection_words: String::new(),
-            fps: 10,
-            margin: 300,
+            fps: 5,
+            margin: 250,
         }
     }
 }
@@ -112,9 +110,9 @@ impl Default for YoloSettings {
     fn default() -> Self {
         Self {
             margin: 300,
-            fps: 10,
-            min_confidence: 50,
-            threshold: 10,
+            fps: 5,
+            min_confidence: 25,
+            threshold: 5,
         }
     }
 }

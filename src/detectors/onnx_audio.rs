@@ -110,26 +110,23 @@ impl OnnxAudio {
     }
 
     fn compute_mel_spectrogram(samples: &[f32], sample_rate: f32) -> Array4<f32> {
-        let n_fft = 1024 * 4; // 4096
-        let hop_length = 512 * 4; // 2048
-        let n_mels = 64 * 4; // 256
+        let n_fft = 1024 * 4;
+        let hop_length = 512 * 4;
+        let n_mels = 64 * 4;
         let n_fft_bins = n_fft / 2 + 1;
 
-        // 1. CENTER PADDING (Matches PyTorch's default center=True behavior)
         let pad_len = n_fft / 2;
         let mut padded_samples = Vec::with_capacity(samples.len() + 2 * pad_len);
         padded_samples.resize(pad_len, 0.0);
         padded_samples.extend_from_slice(samples);
         padded_samples.resize(samples.len() + 2 * pad_len, 0.0);
 
-        // 2. DYNAMICALLY CALCULATE EXPECTED STFT FRAMES
         let expected_time_frames = if padded_samples.len() >= n_fft {
             1 + (padded_samples.len() - n_fft) / hop_length
         } else {
             0
         };
 
-        // 3. STFT & POWER SPECTRUM
         let mut planner = FftPlanner::new();
         let fft = planner.plan_fft_forward(n_fft);
 
@@ -139,7 +136,6 @@ impl OnnxAudio {
         while start + n_fft <= padded_samples.len() {
             let mut windowed = vec![Complex::new(0.0, 0.0); n_fft];
             for i in 0..n_fft {
-                // Hann Window
                 let hann = 0.5
                     * (1.0 - (2.0 * std::f32::consts::PI * i as f32 / (n_fft - 1) as f32).cos());
                 windowed[i] = Complex::new(padded_samples[start + i] * hann, 0.0);
@@ -155,7 +151,6 @@ impl OnnxAudio {
             start += hop_length;
         }
 
-        // 4. MEL FILTERBANK CONSTRUCTION
         let hz_to_mel = |hz: f32| 2595.0 * (1.0 + hz / 700.0).log10();
         let mel_to_hz = |mel: f32| 700.0 * (10.0f32.powf(mel / 2595.0) - 1.0);
 
@@ -184,7 +179,6 @@ impl OnnxAudio {
             }
         }
 
-        // 5. BUILD TENSOR [1, 1, n_mels, time_frames]
         let actual_time_frames = frames.len();
         let mut mel_spectrogram = Array4::zeros((1, 1, n_mels, actual_time_frames));
 
