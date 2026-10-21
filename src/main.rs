@@ -65,7 +65,7 @@ fn main() {
     let audio_server = audio_server::AudioServer::new(Duration::from_millis(700), 22050)
         .unwrap_or_else(|err| panic!("{}", err));
     let audio_detector =
-        detectors::onnx_audio::OnnxAudio::new(audio_server, 22050).unwrap_or_else(|err| {
+        detectors::onnx_audio::OnnxAudio::new(audio_server.get_ring_buffer(), 22050).unwrap_or_else(|err| {
             error!("Failed to initialize ONNX Audio: {}", err);
             panic!("{}", err);
         });

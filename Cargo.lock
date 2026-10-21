@@ -5696,7 +5696,7 @@ dependencies = [
 
 [[package]]
 name = "terraria_fishing_bot"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "cpal",
  "device_query",

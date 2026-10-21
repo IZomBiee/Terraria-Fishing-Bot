@@ -67,8 +67,7 @@ impl AudioServer {
         })
     }
 
-    pub fn get_buffer(&self) -> Option<VecDeque<f32>> {
-        let lock = self.ring_buffer.try_lock().ok()?;
-        return Some(lock.clone());
+    pub fn get_ring_buffer(&self) -> Arc<Mutex<VecDeque<f32>>> {
+        Arc::clone(&self.ring_buffer)
     }
 }

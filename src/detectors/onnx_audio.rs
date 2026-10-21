@@ -2,37 +2,96 @@ use image::{Rgba, RgbaImage};
 use ndarray::Array4;
 use ort::value::Value;
 use ort::{session::Session, value::TensorValueType};
-use rustfft::{FftPlanner, num_complex::Complex};
-
-use crate::audio_server::AudioServer;
+use rustfft::{Fft, FftPlanner, num_complex::Complex};
+use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
 
 static MODEL_BYTES: &[u8] = include_bytes!("../../assets/sound_detector.onnx");
 
+pub struct MelConfig {
+    pub n_fft: usize,
+    pub hop_length: usize,
+    pub n_mels: usize,
+    pub hann_window: Vec<f32>,
+    pub filterbank: Vec<Vec<f32>>,
+    pub fft: Arc<dyn Fft<f32>>,
+}
+
+impl MelConfig {
+    pub fn new(sample_rate: f32, n_fft: usize, hop_length: usize, n_mels: usize) -> Self {
+        let mut planner = FftPlanner::new();
+        let fft = planner.plan_fft_forward(n_fft);
+
+        let hann_window: Vec<f32> = (0..n_fft)
+            .map(|i| 0.5 * (1.0 - (2.0 * std::f32::consts::PI * i as f32 / (n_fft - 1) as f32).cos()))
+            .collect();
+
+        let n_fft_bins = n_fft / 2 + 1;
+        let hz_to_mel = |hz: f32| 2595.0 * (1.0 + hz / 700.0).log10();
+        let mel_to_hz = |mel: f32| 700.0 * (10.0f32.powf(mel / 2595.0) - 1.0);
+
+        let min_mel = hz_to_mel(0.0);
+        let max_mel = hz_to_mel(sample_rate / 2.0);
+
+        let mut mel_points = vec![0.0f32; n_mels + 2];
+        for i in 0..(n_mels + 2) {
+            let fraction = i as f32 / (n_mels + 1) as f32;
+            mel_points[i] = mel_to_hz(min_mel + fraction * (max_mel - min_mel));
+        }
+
+        let mut filterbank = vec![vec![0.0f32; n_fft_bins]; n_mels];
+        for m in 0..n_mels {
+            let f_minus = mel_points[m];
+            let f_center = mel_points[m + 1];
+            let f_plus = mel_points[m + 2];
+
+            for k in 0..n_fft_bins {
+                let hz = (k as f32 * sample_rate) / n_fft as f32;
+                if hz > f_minus && hz < f_center {
+                    filterbank[m][k] = (hz - f_minus) / (f_center - f_minus);
+                } else if hz >= f_center && hz < f_plus {
+                    filterbank[m][k] = (f_plus - hz) / (f_plus - f_center);
+                }
+            }
+        }
+
+        Self {
+            n_fft,
+            hop_length,
+            n_mels,
+            hann_window,
+            filterbank,
+            fft,
+        }
+    }
+}
+
+pub type AudioBuffer = Arc<Mutex<VecDeque<f32>>>;
+
 pub struct OnnxAudio {
-    pub sample_rate: u32,
     pub last_confidence_level: f32,
-    audio_server: AudioServer,
+    pub mel_config: MelConfig,
+    ring_buffer: AudioBuffer,
     onnx_session: Session,
 }
 
 impl OnnxAudio {
-    pub fn new(audio_server: AudioServer, sample_rate: u32) -> Result<Self, String> {
+    pub fn new(ring_buffer: AudioBuffer, sample_rate: u32) -> Result<Self, String> {
         let onnx_session = Session::builder()
             .map_err(|e| format!("Failed to build ONNX builder: {}", e))?
             .commit_from_memory(MODEL_BYTES)
             .map_err(|e| format!("Failed to load sound_detector.onnx model: {}", e))?;
+
         return Ok(Self {
             onnx_session,
+            mel_config: MelConfig::new(sample_rate as f32, 1024 * 4, 512 * 4, 64 * 4),
             last_confidence_level: 0.0,
-            audio_server,
-            sample_rate,
+            ring_buffer
         });
     }
 
     fn prepare_session_inputs(&self, snapshot: &[f32]) -> Option<Value<TensorValueType<f32>>> {
-        let mel_spectrogram =
-            OnnxAudio::compute_mel_spectrogram(&snapshot, self.sample_rate as f32);
-
+        let mel_spectrogram = self.compute_mel_spectrogram(snapshot);
         Value::from_array(mel_spectrogram).ok()
     }
 
@@ -48,7 +107,8 @@ impl OnnxAudio {
     }
 
     pub fn update(&mut self) {
-        let Some(mut snapshot) = self.audio_server.get_buffer() else {
+        let Some(mut snapshot) = self.ring_buffer.try_lock().ok()
+            .map(|buf| buf.clone()) else {
             return;
         };
 
@@ -69,7 +129,8 @@ impl OnnxAudio {
     pub fn render_waveform(&self, width: u32, height: u32) -> Option<RgbaImage> {
         let mut img = RgbaImage::from_pixel(width, height, Rgba([30, 30, 35, 255]));
 
-        let Some(mut snapshot) = self.audio_server.get_buffer() else {
+        let Some(mut snapshot) = self.ring_buffer.try_lock().ok()
+            .map(|buf| buf.clone()) else {
             return None;
         };
 
@@ -108,84 +169,50 @@ impl OnnxAudio {
         Some(img)
     }
 
-    fn compute_mel_spectrogram(samples: &[f32], sample_rate: f32) -> Array4<f32> {
-        let n_fft = 1024 * 4;
-        let hop_length = 512 * 4;
-        let n_mels = 64 * 4;
-        let n_fft_bins = n_fft / 2 + 1;
+    fn compute_mel_spectrogram(&self, samples: &[f32]) -> Array4<f32> {
+        let cfg = &self.mel_config;
+        let n_fft_bins = cfg.n_fft / 2 + 1;
 
-        let pad_len = n_fft / 2;
+        let pad_len = cfg.n_fft / 2;
         let mut padded_samples = Vec::with_capacity(samples.len() + 2 * pad_len);
         padded_samples.resize(pad_len, 0.0);
         padded_samples.extend_from_slice(samples);
         padded_samples.resize(samples.len() + 2 * pad_len, 0.0);
 
-        let expected_time_frames = if padded_samples.len() >= n_fft {
-            1 + (padded_samples.len() - n_fft) / hop_length
+        let expected_time_frames = if padded_samples.len() >= cfg.n_fft {
+            1 + (padded_samples.len() - cfg.n_fft) / cfg.hop_length
         } else {
             0
         };
 
-        let mut planner = FftPlanner::new();
-        let fft = planner.plan_fft_forward(n_fft);
-
         let mut frames = Vec::with_capacity(expected_time_frames);
         let mut start = 0;
+        let mut windowed = vec![Complex::new(0.0, 0.0); cfg.n_fft];
 
-        while start + n_fft <= padded_samples.len() {
-            let mut windowed = vec![Complex::new(0.0, 0.0); n_fft];
-            for i in 0..n_fft {
-                let hann = 0.5
-                    * (1.0 - (2.0 * std::f32::consts::PI * i as f32 / (n_fft - 1) as f32).cos());
-                windowed[i] = Complex::new(padded_samples[start + i] * hann, 0.0);
+        while start + cfg.n_fft <= padded_samples.len() {
+            for i in 0..cfg.n_fft {
+                windowed[i] = Complex::new(padded_samples[start + i] * cfg.hann_window[i], 0.0);
             }
 
-            fft.process(&mut windowed);
+            cfg.fft.process(&mut windowed);
 
             let mut power_spectrum = vec![0.0f32; n_fft_bins];
             for i in 0..n_fft_bins {
                 power_spectrum[i] = windowed[i].norm_sqr();
             }
             frames.push(power_spectrum);
-            start += hop_length;
-        }
-
-        let hz_to_mel = |hz: f32| 2595.0 * (1.0 + hz / 700.0).log10();
-        let mel_to_hz = |mel: f32| 700.0 * (10.0f32.powf(mel / 2595.0) - 1.0);
-
-        let min_mel = hz_to_mel(0.0);
-        let max_mel = hz_to_mel(sample_rate / 2.0);
-
-        let mut mel_points = vec![0.0f32; n_mels + 2];
-        for i in 0..(n_mels + 2) {
-            let fraction = i as f32 / (n_mels + 1) as f32;
-            mel_points[i] = mel_to_hz(min_mel + fraction * (max_mel - min_mel));
-        }
-
-        let mut fb = vec![vec![0.0f32; n_fft_bins]; n_mels];
-        for m in 0..n_mels {
-            let f_minus = mel_points[m];
-            let f_center = mel_points[m + 1];
-            let f_plus = mel_points[m + 2];
-
-            for k in 0..n_fft_bins {
-                let hz = (k as f32 * sample_rate) / n_fft as f32;
-                if hz > f_minus && hz < f_center {
-                    fb[m][k] = (hz - f_minus) / (f_center - f_minus);
-                } else if hz >= f_center && hz < f_plus {
-                    fb[m][k] = (f_plus - hz) / (f_plus - f_center);
-                }
-            }
+            start += cfg.hop_length;
         }
 
         let actual_time_frames = frames.len();
-        let mut mel_spectrogram = Array4::zeros((1, 1, n_mels, actual_time_frames));
+        let mut mel_spectrogram = Array4::zeros((1, 1, cfg.n_mels, actual_time_frames));
 
         for t in 0..actual_time_frames {
-            for m in 0..n_mels {
+            for m in 0..cfg.n_mels {
                 let mut mel_energy = 0.0f32;
+                let fb_row = &cfg.filterbank[m];
                 for k in 0..n_fft_bins {
-                    mel_energy += frames[t][k] * fb[m][k];
+                    mel_energy += frames[t][k] * fb_row[k];
                 }
                 let db = 10.0 * (mel_energy.max(1e-10)).log10();
                 mel_spectrogram[[0, 0, m, t]] = db;

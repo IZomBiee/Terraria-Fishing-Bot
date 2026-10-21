@@ -4,10 +4,14 @@ use oar_ocr::domain::tasks::TextDetectionConfig;
 use oar_ocr::prelude::*;
 use regex::Regex;
 use strsim::levenshtein;
+use std::sync::LazyLock;
 
 static DET_MODEL_BYTES: &[u8] = include_bytes!("../../assets/PP-OCRv6_small_det.onnx");
 static REC_MODEL_BYTES: &[u8] = include_bytes!("../../assets/PP-OCRv6_small_rec.onnx");
 static KEYS_STR: &str = include_str!("../../assets/ppocr_keys.txt");
+static CLEAN_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"[^a-zA-Z0-9\s.,!?-]").expect("Invalid regex pattern")
+});
 
 pub struct Ocr {
     engine: OAROCR,
@@ -36,8 +40,7 @@ impl Default for Ocr {
 
 impl Ocr {
     fn clean_ocr_text(input: &str) -> String {
-        let re = Regex::new(r"[^a-zA-Z0-9\s.,!?-]").unwrap();
-        re.replace_all(input, " ").to_string()
+        CLEAN_RE.replace_all(input, " ").to_string()
     }
 
     pub fn update(&mut self, frame: RgbaImage) {

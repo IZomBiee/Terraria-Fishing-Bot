@@ -145,6 +145,7 @@ impl LiquidLevelCalibrator {
         let liquid_level = LiquidLevelCalibrator::get_liquid_level(difference_mask);
         if let Some(level) = liquid_level {
             self.liquid_levels.push(level);
+            self.liquid_levels.sort();
         }
     }
 

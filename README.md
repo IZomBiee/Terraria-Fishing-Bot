@@ -65,8 +65,8 @@ Terraria advanced fishing bot, written entirely in Rust. Created for practicing/
 - Only catch if both of detectors triggered.
 
 ### Movemap Method
-- The bot WILL NOT WORK in movemap mode if you do not have waves enabled in Terraria settings.
-- The bot may not work properly in the Underworld due to heat distortion. Setting a contrasting background can help.
+- Will not work if you do not have waves enabled in Terraria settings.
+- May not work properly in the Underworld due to heat distortion. Setting a contrasting background can help.
 - During heavy rain, false alarms may occur. Building a roof overhead prevents this.
 - While fishing in lava, increase the gap size, threshold, and noise delay settings to account for lava bubbles.
 - All in all, it's unreliable - it's better to use other options - but it's the fastest.
